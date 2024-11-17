@@ -1,0 +1,45 @@
+# .github/workflows/pr-draft-release.yml
+name: Draft Release Notes
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [ main ]
+
+permissions:
+  contents: write
+  id-token: write
+  pull-requests: write
+
+jobs:
+  draft-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Generate Draft Release
+        uses: .github/actions/release
+        with:
+          azure_openai_endpoint: ${{ secrets.STRATUS_AZURE_OPENAI_API_ENDPOINT }}
+          azure_openai_deployment_name: gpt-4o
+          azure_client_id: ${{ secrets.STRATUS_AZURE_OPENAI_CLIENT_ID }}
+          azure_tenant_id: ${{ secrets.STRATUS_AZURE_OPENAI_TENANT_ID }}
+          azure_subscription_id: ${{ secrets.STRATUS_AZURE_OPENAI_SUBSCRIPTION_ID }}
+          draft: true  # Creates a draft release
+          prerelease: true  # Marks it as prerelease until merged
+
+      - name: Comment Release Notes on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const releaseNotes = fs.readFileSync('release_notes.md', 'utf8');
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 📝 Generated Release Notes Preview\n\n${releaseNotes}\n\nYou can review and edit these release notes in the draft release before merging.`
+            })

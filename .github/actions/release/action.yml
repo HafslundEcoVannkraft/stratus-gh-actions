@@ -109,9 +109,9 @@ runs:
           echo "Error: azure_openai_endpoint must start with https://"  
           exit 1  
         fi  
-        # Validate the default_bump_level  
+        # Validate the default_bump_level
         valid_bump_levels=("major" "minor" "patch" "")  
-        if [[ ! " ${valid_bump_levels[@]} " =~ " ${default_bump_level} " ]]; then  
+        if [[ ! " ${valid_bump_levels[@]} " =~ " ${{ inputs.default_bump_level }} " ]]; then  
           echo "Error: Invalid default_bump_level value. Must be one of: 'major', 'minor', 'patch', or empty."  
           exit 1  
         fi  
@@ -154,29 +154,17 @@ runs:
           bump_level="minor"  
         elif [[ "$commit_message" == *"fix:"* || "$commit_message" == *"patch:"* ]]; then  
           bump_level="patch"  
-        fi  
-  
-        # Check for pre-release identifiers  
-        if [[ "$commit_message" == *"alpha:"* ]]; then  
-          pre_release_type="alpha"  
-        elif [[ "$commit_message" == *"beta:"* ]]; then  
-          pre_release_type="beta"  
-        elif [[ "$commit_message" == *"rc:"* ]]; then  
-          pre_release_type="rc"  
-        elif [[ "$commit_message" == *"preview:"* ]]; then  
-          pre_release_type="preview"  
-        fi  
-  
+        fi
+
         # Use default bump level if no bump_level is determined  
         if [[ -z "$bump_level" && -n "${{ inputs.default_bump_level }}" ]]; then  
           bump_level="${{ inputs.default_bump_level }}"  
-        fi  
-  
-        # If no bump type and no pre-release type is found, use patch as default
-        if [[ -z "$bump_level" && -z "$pre_release_type" ]]; then
-          bump_level="patch"
+        else
+         # If no bump level is determined and no default is set, exit without creating a new version  
+         echo "No version bump level determined. Exiting without creating a new version."  
+          exit 0  
         fi
-  
+    
         # Calculate new version  
         new_major=$major  
         new_minor=$minor  
@@ -192,7 +180,18 @@ runs:
           new_patch=0  
         elif [[ "$bump_level" == "patch" ]]; then  
           new_patch=$((patch + 1))  
-        fi  
+        fi
+
+        # Check for pre-release identifiers  
+        if [[ "$commit_message" == *"alpha:"* ]]; then  
+          pre_release_type="alpha"  
+        elif [[ "$commit_message" == *"beta:"* ]]; then  
+          pre_release_type="beta"  
+        elif [[ "$commit_message" == *"rc:"* ]]; then  
+          pre_release_type="rc"  
+        elif [[ "$commit_message" == *"preview:"* ]]; then  
+          pre_release_type="preview"  
+        fi    
   
         if [[ -n "$pre_release_type" ]]; then  
           # Handle pre-release versioning  
@@ -212,7 +211,8 @@ runs:
         {  
           echo "new_version=$new_version"  
           echo "previous_version=$base_tag"  
-          echo "bump_level=${bump_level:-$pre_release_type}"  
+          echo "bump_level=${bump_level:-$pre_release_type}"
+          echo "pre_release_type=$pre_release_type"  
         } >> "$GITHUB_OUTPUT"
 
     - name: Set up Git

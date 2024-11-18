@@ -415,7 +415,7 @@ runs:
         cat release_notes.md
 
     - name: Append Contributors to Release Notes
-      if: ${{ inputs.closing_note }} != '' && ${{ steps.version_info.outputs.skip_release_notes != 'true' }}
+      if: ${{ inputs.closing_note != '' && steps.version_info.outputs.skip_release_notes != 'true' }}
       id: append_contributors
       shell: bash
       run: |

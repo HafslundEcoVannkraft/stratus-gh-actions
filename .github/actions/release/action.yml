@@ -30,7 +30,7 @@ inputs:
     required: false
   azure_openai_api_version:
     description: "Azure OpenAI API version"
-    required: false
+    required: true
   temperature:
     description: "Temperature for text generation (0.0-2.0)"
     required: false

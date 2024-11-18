@@ -23,6 +23,7 @@ jobs:
         with:
           azure_openai_endpoint: ${{ secrets.STRATUS_AZURE_OPENAI_API_ENDPOINT }}
           azure_openai_deployment_name: gpt-4o
+          azure_openai_api_version: 2024-10-21
           azure_client_id: ${{ secrets.STRATUS_AZURE_OPENAI_CLIENT_ID }}
           azure_tenant_id: ${{ secrets.STRATUS_AZURE_OPENAI_TENANT_ID }}
           azure_subscription_id: ${{ secrets.STRATUS_AZURE_OPENAI_SUBSCRIPTION_ID }}

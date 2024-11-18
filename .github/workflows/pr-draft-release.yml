@@ -1,4 +1,3 @@
-# .github/workflows/pr-draft-release.yml
 name: Draft Release Notes
 
 on:

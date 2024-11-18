@@ -238,9 +238,8 @@ runs:
         git push origin "${{ steps.version_info.outputs.new_version }}"
 
     - name: Azure login
-      if: ${{ steps.version_info.outputs.skip_release_notes != 'true' }}
+      if: ${{ !inputs.azure_openai_api_key && steps.version_info.outputs.skip_release_notes != 'true' }}
       uses: azure/login@v2
-      if: "!inputs.azure_openai_api_key"
       with:
         client-id: ${{ inputs.azure_client_id }}
         tenant-id: ${{ inputs.azure_tenant_id }}

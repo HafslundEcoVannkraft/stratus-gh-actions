@@ -165,12 +165,8 @@ runs:
         if [[ -z "$bump_level" && -n "${{ inputs.default_bump_level }}" ]]; then
           bump_level="${{ inputs.default_bump_level }}"
         else
-          # If no bump level is determined and no default is set, exit without creating a new version
-          echo "No version bump level determined. Exiting workflow without creating a new version."
-          
-          # Disable strict error checking to allow graceful exit
-          set +e
-          exit 0
+          echo "No bump level determined from commit message and no default_bump_level provided. The next steps will be skipped as no Release Notes will be generated."
+          echo "skip_release_notes=true" >> $GITHUB_OUPUT
         fi
 
         # Calculate new version  
@@ -224,6 +220,7 @@ runs:
         } >> "$GITHUB_OUTPUT"
 
     - name: Set up Git
+      if: ${{ steps.version_info.outputs.skip_release_notes != 'true' }}
       shell: bash
       env:
         GIT_USER_NAME: "github-actions[bot]"
@@ -233,6 +230,7 @@ runs:
         git config --global user.email "$GIT_USER_EMAIL"
 
     - name: Tag new version
+      if: ${{ steps.version_info.outputs.skip_release_notes != 'true' }}
       shell: bash
       run: |
         set -e
@@ -240,6 +238,7 @@ runs:
         git push origin "${{ steps.version_info.outputs.new_version }}"
 
     - name: Azure login
+      if: ${{ steps.version_info.outputs.skip_release_notes != 'true' }}
       uses: azure/login@v2
       if: "!inputs.azure_openai_api_key"
       with:
@@ -248,6 +247,7 @@ runs:
         subscription-id: ${{ inputs.azure_subscription_id }}
 
     - name: Configure Azure OpenAI
+      if: ${{ steps.version_info.outputs.skip_release_notes != 'true' }}
       id: azure_openai_config
       shell: bash
       env:
@@ -280,6 +280,7 @@ runs:
         echo "Debug: Azure OpenAI configuration complete"
 
     - name: Extract Contributors
+      if: ${{ steps.version_info.outputs.skip_release_notes != 'true' }}
       id: contributors
       shell: bash
       env:
@@ -295,6 +296,7 @@ runs:
 
 
     - name: Generate Release Notes
+      if: ${{ steps.version_info.outputs.skip_release_notes != 'true' }}
       id: release_notes
       shell: bash
       env:
@@ -413,7 +415,7 @@ runs:
         cat release_notes.md
 
     - name: Append Contributors to Release Notes
-      if: ${{ inputs.closing_note }} != ''
+      if: ${{ inputs.closing_note }} != '' && ${{ steps.version_info.outputs.skip_release_notes != 'true' }}
       id: append_contributors
       shell: bash
       run: |
@@ -428,6 +430,7 @@ runs:
         cat release_notes.md
 
     - name: Create GitHub Release
+      if: ${{ steps.version_info.outputs.skip_release_notes != 'true' }}
       shell: bash
       env:
         GITHUB_TOKEN: ${{ github.token }}

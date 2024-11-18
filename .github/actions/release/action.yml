@@ -143,8 +143,12 @@ runs:
         fi
   
         # Determine bump type from commit message  
-        commit_message=$(echo "${{ github.event.head_commit.message }}" | tr '[:upper:]' '[:lower:]')
+        # Fetch the latest commit message
+        commit_message=$(git log -1 --pretty=%B | tr '[:upper:]' '[:lower:]')
         echo "Commit message: $commit_message"
+
+        # Determine bump type priority: major > minor > patch 
+
         bump_level=""  
         pre_release_type=""  
   

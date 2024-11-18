@@ -1,0 +1,8 @@
+name: "Hello world composite action"
+description: "A hello world composite action"
+runs:
+  using: "composite"
+  steps:
+    - name: Execute entrypoint script
+      shell: bash
+      run: ./entrypoint.sh

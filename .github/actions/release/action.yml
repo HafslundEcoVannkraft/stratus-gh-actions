@@ -164,60 +164,61 @@ runs:
         # Use default bump level if no bump_level is determined  
         if [[ -z "$bump_level" && -n "${{ inputs.default_bump_level }}" ]]; then
           bump_level="${{ inputs.default_bump_level }}"
+
+          # Calculate new version  
+          new_major=$major  
+          new_minor=$minor  
+          new_patch=$patch  
+    
+          # Apply version bump  
+          if [[ "$bump_level" == "major" ]]; then  
+            new_major=$((major + 1))  
+            new_minor=0  
+            new_patch=0  
+          elif [[ "$bump_level" == "minor" ]]; then  
+            new_minor=$((minor + 1))  
+            new_patch=0  
+          elif [[ "$bump_level" == "patch" ]]; then  
+            new_patch=$((patch + 1))  
+          fi
+
+          # Check for pre-release identifiers  
+          if [[ "$commit_message" == *"alpha:"* ]]; then  
+            pre_release_type="alpha"  
+          elif [[ "$commit_message" == *"beta:"* ]]; then  
+            pre_release_type="beta"  
+          elif [[ "$commit_message" == *"rc:"* ]]; then  
+            pre_release_type="rc"  
+          elif [[ "$commit_message" == *"preview:"* ]]; then  
+            pre_release_type="preview"  
+          fi    
+    
+          if [[ -n "$pre_release_type" ]]; then  
+            # Handle pre-release versioning  
+            current_pre_release=$(git tag --sort=-v:refname | grep "^v${new_major}.${new_minor}.${new_patch}-${pre_release_type}" | head -n 1 || echo "")  
+            if [[ -z "$current_pre_release" ]]; then  
+              new_version="v${new_major}.${new_minor}.${new_patch}-${pre_release_type}.1"  
+            else  
+              current_number=$(echo $current_pre_release | awk -F- '{print $2}' | cut -d'.' -f2)  
+              new_version="v${new_major}.${new_minor}.${new_patch}-${pre_release_type}.$((current_number + 1))"  
+            fi  
+          else  
+            # Regular versioning without pre-release  
+            new_version="v${new_major}.${new_minor}.${new_patch}"  
+          fi  
+    
+          # Output values for other steps  
+          {  
+            echo "new_version=$new_version"  
+            echo "previous_version=$base_tag"  
+            echo "bump_level=${bump_level:-$pre_release_type}"
+            echo "pre_release_type=$pre_release_type"  
+          } >> "$GITHUB_OUTPUT"
+
         else
-          echo "No bump level determined from commit message and no default_bump_level provided. The next steps will be skipped as no Release Notes will be generated."
+          echo "No bump level determined from commit message and no default_bump_level provided. The next steps will be skipped as no Release Notes should be generated."
           echo "skip_release_notes=true" >> $GITHUB_OUPUT
         fi
-
-        # Calculate new version  
-        new_major=$major  
-        new_minor=$minor  
-        new_patch=$patch  
-  
-        # Apply version bump  
-        if [[ "$bump_level" == "major" ]]; then  
-          new_major=$((major + 1))  
-          new_minor=0  
-          new_patch=0  
-        elif [[ "$bump_level" == "minor" ]]; then  
-          new_minor=$((minor + 1))  
-          new_patch=0  
-        elif [[ "$bump_level" == "patch" ]]; then  
-          new_patch=$((patch + 1))  
-        fi
-
-        # Check for pre-release identifiers  
-        if [[ "$commit_message" == *"alpha:"* ]]; then  
-          pre_release_type="alpha"  
-        elif [[ "$commit_message" == *"beta:"* ]]; then  
-          pre_release_type="beta"  
-        elif [[ "$commit_message" == *"rc:"* ]]; then  
-          pre_release_type="rc"  
-        elif [[ "$commit_message" == *"preview:"* ]]; then  
-          pre_release_type="preview"  
-        fi    
-  
-        if [[ -n "$pre_release_type" ]]; then  
-          # Handle pre-release versioning  
-          current_pre_release=$(git tag --sort=-v:refname | grep "^v${new_major}.${new_minor}.${new_patch}-${pre_release_type}" | head -n 1 || echo "")  
-          if [[ -z "$current_pre_release" ]]; then  
-            new_version="v${new_major}.${new_minor}.${new_patch}-${pre_release_type}.1"  
-          else  
-            current_number=$(echo $current_pre_release | awk -F- '{print $2}' | cut -d'.' -f2)  
-            new_version="v${new_major}.${new_minor}.${new_patch}-${pre_release_type}.$((current_number + 1))"  
-          fi  
-        else  
-          # Regular versioning without pre-release  
-          new_version="v${new_major}.${new_minor}.${new_patch}"  
-        fi  
-  
-        # Output values for other steps  
-        {  
-          echo "new_version=$new_version"  
-          echo "previous_version=$base_tag"  
-          echo "bump_level=${bump_level:-$pre_release_type}"
-          echo "pre_release_type=$pre_release_type"  
-        } >> "$GITHUB_OUTPUT"
 
     - name: Set up Git
       if: ${{ steps.version_info.outputs.skip_release_notes != 'true' }}

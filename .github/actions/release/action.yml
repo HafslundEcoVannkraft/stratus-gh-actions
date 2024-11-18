@@ -217,7 +217,7 @@ runs:
 
         else
           echo "No bump level determined from commit message and no default_bump_level provided. The next steps will be skipped as no Release Notes should be generated."
-          echo "skip_release_notes=true" >> $GITHUB_OUPUT
+          echo "skip_release_notes=true" >> $GITHUB_OUTPUT
         fi
 
     - name: Set up Git

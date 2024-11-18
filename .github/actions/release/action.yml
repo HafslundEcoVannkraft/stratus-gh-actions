@@ -162,14 +162,17 @@ runs:
         fi
 
         # Use default bump level if no bump_level is determined  
-        if [[ -z "$bump_level" && -n "${{ inputs.default_bump_level }}" ]]; then  
-          bump_level="${{ inputs.default_bump_level }}"  
+        if [[ -z "$bump_level" && -n "${{ inputs.default_bump_level }}" ]]; then
+          bump_level="${{ inputs.default_bump_level }}"
         else
-         # If no bump level is determined and no default is set, exit without creating a new version  
-         echo "No version bump level determined. Exiting without creating a new version."  
-          exit 0  
+          # If no bump level is determined and no default is set, exit without creating a new version
+          echo "No version bump level determined. Exiting workflow without creating a new version."
+          
+          # Disable strict error checking to allow graceful exit
+          set +e
+          exit 0
         fi
-    
+
         # Calculate new version  
         new_major=$major  
         new_minor=$minor  

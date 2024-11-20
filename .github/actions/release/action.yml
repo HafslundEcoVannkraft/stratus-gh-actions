@@ -282,7 +282,7 @@ runs:
           {  
             echo "new_version=$new_version"  
             echo "previous_version=$base_tag"  
-            echo "bump_level=${bump_level:-$pre_release_type}"
+            echo "bump_level=$bump_level"
             echo "pre_release_type=$pre_release_type"  
           } >> "$GITHUB_OUTPUT"
         fi

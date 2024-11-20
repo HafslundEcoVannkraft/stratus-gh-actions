@@ -19,7 +19,7 @@ jobs:
           fetch-depth: 0
       
       - name: Generate Draft Release
-        id: release
+      - id: release_draft
         uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@main
         with:
           azure_openai_endpoint: ${{ secrets.STRATUS_AZURE_OPENAI_API_ENDPOINT }}
@@ -35,13 +35,13 @@ jobs:
       - name: Debug release outputs
         run: |
           echo "Composite action outputs:"
-          echo "version: ${{ steps.release.outputs.version }}"
-          echo "previous_version: ${{ steps.release.outputs.previous_version }}"
-          echo "bump_level: ${{ steps.release.outputs.bump_level }}"
-          echo "release_notes: ${{ steps.release.outputs.release_notes }}"
+          echo "version: ${{ steps.release_draft.outputs.version }}"
+          echo "previous_version: ${{ steps.release_draft.outputs.previous_version }}"
+          echo "bump_level: ${{ steps.release_draft.outputs.bump_level }}"
+          echo "release_notes: ${{ steps.release_draft.outputs.release_notes }}"
 
       - name: Comment Release Notes on PR
-        if: ${{ steps.release.outputs.release_notes != '' }}
+        if: ${{ steps.release_draft.outputs.release_notes != '' }}
         uses: actions/github-script@v7
         with:
           script: |

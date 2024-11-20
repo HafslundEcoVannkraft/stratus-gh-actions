@@ -515,9 +515,7 @@ runs:
         fi
 
         release_body=$(cat release_notes.md | jq -Rsa .)
-        release_notes_base64=$(cat release_notes.md | base64)
-        echo "Release Notes b64: $release_notes_base64"
-        echo "release_notes_base64=$release_notes_base64" >> "$GITHUB_OUTPUT"
+        echo "release_notes_base64=$(cat release_notes.md | base64 -w 0)" >> $GITHUB_OUTPUT
 
         echo "Debug: Creating release with:"
         echo "Tag: ${{ steps.version_info.outputs.new_version }}"

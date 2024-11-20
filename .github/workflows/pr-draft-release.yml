@@ -29,11 +29,11 @@ jobs:
           azure_subscription_id: ${{ secrets.STRATUS_AZURE_OPENAI_SUBSCRIPTION_ID }}
           draft: true  # Creates a draft release
           prerelease: true  # Marks it as prerelease until merged
-          append_context: "This repository is a monorepo containing multiple GitHub Actions composite actions, organized under the .github/actions folder, with each action in its own subfolder. If multiple actions are updated in the same release, the Release Notes should highlight the updated composite actions and group the updates under each respective composite action for better organization."
+          append_context: "This repository is a monorepo containing multiple GitHub Actions composite actions, organized under the .github/actions folder, with each action in its own subfolder. If multiple actions are updated in the same release, the Release Notes should categorize updates, improvments and bug fixes per composite action."
 
       - name: Debug release outputs
         env:
-          version: ${{ steps.release_draft.outputs.version }}
+          new_version: ${{ steps.release_draft.outputs.new_version }}
           previous_version: ${{ steps.release_draft.outputs.previous_version }}
           bump_level: ${{ steps.release_draft.outputs.bump_level }}
           release_notes_base64: ${{ steps.release_draft.outputs.release_notes_base64 }}

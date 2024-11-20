@@ -31,28 +31,15 @@ jobs:
           prerelease: true  # Marks it as prerelease until merged
           append_context: "This repository is a monorepo containing multiple GitHub Actions composite actions, organized under the .github/actions folder, with each action in its own subfolder. If multiple actions are updated in the same release, the Release Notes should categorize updates, improvments and bug fixes per composite action."
 
-      - name: Debug release outputs
-        env:
-          new_version: ${{ steps.release_draft.outputs.new_version }}
-          previous_version: ${{ steps.release_draft.outputs.previous_version }}
-          bump_level: ${{ steps.release_draft.outputs.bump_level }}
-          release_notes_base64: ${{ steps.release_draft.outputs.release_notes_base64 }}
-        run: |
-          echo "Composite action outputs:"
-          echo "new_version: $new_version"
-          echo "previous_version: $previous_version"
-          echo "bump_level: $bump_level"
-          echo "release_notes_base64: $release_notes_base64"
-
       - name: Comment Release Notes on PR
         if: ${{ steps.release_draft.outputs.release_notes_base64 != '' }}
         uses: actions/github-script@v7
         with:
           script: |
-            releaseBody=$(echo "${{ steps.release_draft.outputs.release_notes_base64 }} | base64 -d)         
+            releaseBody=$(echo "${{ steps.release_draft.outputs.release_notes_base64 }} | base64 -d")         
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## 📝 Generated Release Notes Preview\n\n${releaseBody}\n\nYou can review and edit these release notes in the draft release before merging.`
+              body: `## 📝 Generated Release Notes Preview\n\n${releaseBody}\n\nYou can review and edit these release notes in the draft release.`
             })

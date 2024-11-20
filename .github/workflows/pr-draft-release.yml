@@ -2,7 +2,7 @@ name: Draft Release
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, update]
     branches: [ main ]
 
 permissions:
@@ -19,7 +19,7 @@ jobs:
           fetch-depth: 0
       
       - id: release_draft
-        uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@2d661b68a2c1277194d72299f95f64b80f01682c
+        uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@latest
         with:
           azure_openai_endpoint: ${{ secrets.STRATUS_AZURE_OPENAI_API_ENDPOINT }}
           azure_openai_deployment_name: gpt-4o
@@ -39,7 +39,7 @@ jobs:
           release_notes_base64: ${{ steps.release_draft.outputs.release_notes_base64 }}
         run: |
           echo "Composite action outputs:"
-          echo "version: $version"
+          echo "new_version: $new_version"
           echo "previous_version: $previous_version"
           echo "bump_level: $bump_level"
           echo "release_notes_base64: $release_notes_base64"

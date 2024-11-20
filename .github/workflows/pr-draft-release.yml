@@ -19,7 +19,7 @@ jobs:
           fetch-depth: 0
       
       - id: release_draft
-        uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@2b8c26e14d627772c2f17b267bc3cfdf5a04766c
+        uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@v1.2.0
         with:
           azure_openai_endpoint: ${{ secrets.STRATUS_AZURE_OPENAI_API_ENDPOINT }}
           azure_openai_deployment_name: gpt-4o

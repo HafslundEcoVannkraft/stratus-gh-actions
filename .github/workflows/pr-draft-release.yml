@@ -2,7 +2,7 @@ name: Draft Release
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, update]
+    types: [opened, synchronize, reopened]
     branches: [ main ]
 
 permissions:
@@ -18,8 +18,9 @@ jobs:
         with:
           fetch-depth: 0
       
-      - id: release_draft
-        uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@96d305a3a83803bbd01f7268647507a509973604
+      - name: ðŸ“£ Draft Release Notes
+        id: release_draft
+        uses: .github/actions/release
         with:
           azure_openai_endpoint: ${{ secrets.STRATUS_AZURE_OPENAI_API_ENDPOINT }}
           azure_openai_deployment_name: gpt-4o
@@ -27,8 +28,8 @@ jobs:
           azure_client_id: ${{ secrets.STRATUS_AZURE_OPENAI_CLIENT_ID }}
           azure_tenant_id: ${{ secrets.STRATUS_AZURE_OPENAI_TENANT_ID }}
           azure_subscription_id: ${{ secrets.STRATUS_AZURE_OPENAI_SUBSCRIPTION_ID }}
-          draft: true  # Creates a draft release
-          prerelease: true  # Marks it as prerelease until merged
+          draft: true
+          prerelease: true
           append_context: "This repository is a monorepo containing multiple GitHub Actions composite actions, organized under the .github/actions folder, with each action in its own subfolder. If multiple actions are updated in the same release, the Release Notes should categorize updates, improvments and bug fixes per composite action."
 
       - name: Comment Release Notes on PR

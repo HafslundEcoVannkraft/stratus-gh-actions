@@ -19,7 +19,7 @@ jobs:
           fetch-depth: 0
       
       - id: release_draft
-        uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@5c90c2b2452045ea161d22de7326ef007a2b3969
+        uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@db81aab16bda3c1873d38d83b8b6174fa052f448
         with:
           azure_openai_endpoint: ${{ secrets.STRATUS_AZURE_OPENAI_API_ENDPOINT }}
           azure_openai_deployment_name: gpt-4o
@@ -36,23 +36,23 @@ jobs:
           version: ${{ steps.release_draft.outputs.version }}
           previous_version: ${{ steps.release_draft.outputs.previous_version }}
           bump_level: ${{ steps.release_draft.outputs.bump_level }}
-          release_notes: ${{ steps.release_draft.outputs.release_notes }}
+          release_body: ${{ steps.release_draft.outputs.release_body }}
         run: |
           echo "Composite action outputs:"
           echo "version: $version"
           echo "previous_version: $previous_version"
           echo "bump_level: $bump_level"
-          echo "release_notes: $release_notes"
+          echo "release_body: $release_body"
 
       - name: Comment Release Notes on PR
-        if: ${{ steps.release_draft.outputs.release_notes != '' }}
+        if: ${{ steps.release_draft.outputs.release_body != '' }}
         uses: actions/github-script@v7
         with:
           script: |
-            releaseNotes=${{ steps.release.outputs.release_notes }}            
+            releaseBody=${{ steps.release.outputs.release_body }}            
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## 📝 Generated Release Notes Preview\n\n${releaseNotes}\n\nYou can review and edit these release notes in the draft release before merging.`
+              body: `## 📝 Generated Release Notes Preview\n\n${releaseBody}\n\nYou can review and edit these release notes in the draft release before merging.`
             })

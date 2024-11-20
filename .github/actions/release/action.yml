@@ -85,15 +85,21 @@ inputs:
     default: ""
   default_bump_level:  
     description: "Specifies the default version bump level. Valid options are '', 'major', 'minor', or 'patch'. Setting this ensures a new version is created even if commit messages lack relevant keywords."  
-    required: false  
+    required: false
 
 outputs:
   version:
     description: "The new version number that was created"
+    value: ${{ steps.version_info.outputs.version }}
   previous_version:
     description: "The previous version used for comparison"
+    value: ${{ steps.version_info.outputs.previous_versiion }}
   bump_level:
     description: "The type of version bump performed (major, minor, patch, or initial)"
+    value: ${{ steps.version_info.outputs.bump_level }}
+  release_notes:
+    description: "The AI generated release note"
+    value: ${{ steps.release.outputs.release_notes }}
 
 runs:  
   using: "composite"  
@@ -214,18 +220,18 @@ runs:
           fi
         fi
 
-        # If no bump_level is found, use default or skip new release
+        generate_release="true"
+
+        # If no bump_level is found, use default or skip generate_release
         if [[ -z "$bump_level" && -n "${{ inputs.default_bump_level }}" ]]; then
           bump_level="${{ inputs.default_bump_level }}"
         elif [[ -z "$bump_level" && -z "${{ inputs.default_bump_level }}" ]]; then
           echo "No bump level determined from commit message and no default_bump_level provided. The next steps will be skipped as no Release Notes should be generated."
-          skip_release_notes=true
-          echo "skip_release_notes=true" >> $GITHUB_OUTPUT
+          generate_release="false"
+          echo "generate_release=" >> $GITHUB_OUTPUT
         fi
 
-        # If skip_release_notes is not set, proceed with version calculation
-
-        if [[ -z "$skip_release_notes" ]]; then
+        if [[ $generate_release ]]; then
 
           # Pre-release type detection
           echo "Checking commit message for pre-release keywords..."
@@ -284,9 +290,10 @@ runs:
         echo "previous_version=$base_tag" >> "$GITHUB_OUTPUT"
         echo "bump_level=$bump_level" >> "$GITHUB_OUTPUT"
         echo "pre_release_type=$pre_release_type" >> "$GITHUB_OUTPUT"
+        echo "generate_release" >> "$GITHUB_OUTPUT"
 
     - name: Set up Git
-      if: ${{ steps.version_info.outputs.skip_release_notes != 'true' }}
+      if: ${{ steps.version_info.outputs.generate_release == 'true' }}
       shell: bash
       env:
         GIT_USER_NAME: "github-actions[bot]"
@@ -296,7 +303,7 @@ runs:
         git config --global user.email "$GIT_USER_EMAIL"
 
     - name: Tag new version
-      if: ${{ steps.version_info.outputs.skip_release_notes != 'true' }}
+      if: ${{ steps.version_info.outputs.generate_release == 'true' }}
       shell: bash
       run: |
         set -e
@@ -304,7 +311,7 @@ runs:
         git push origin "${{ steps.version_info.outputs.new_version }}"
 
     - name: Azure login
-      if: ${{ !inputs.azure_openai_api_key && steps.version_info.outputs.skip_release_notes != 'true' }}
+      if: ${{ !inputs.azure_openai_api_key && steps.version_info.outputs.generate_release == 'true' }}
       uses: azure/login@v2
       with:
         client-id: ${{ inputs.azure_client_id }}
@@ -312,7 +319,7 @@ runs:
         subscription-id: ${{ inputs.azure_subscription_id }}
 
     - name: Configure Azure OpenAI
-      if: ${{ steps.version_info.outputs.skip_release_notes != 'true' }}
+      if: ${{ steps.version_info.outputs.generate_release == 'true' }}
       id: azure_openai_config
       shell: bash
       env:
@@ -345,7 +352,7 @@ runs:
         echo "Debug: Azure OpenAI configuration complete"
 
     - name: Extract Contributors
-      if: ${{ steps.version_info.outputs.skip_release_notes != 'true' }}
+      if: ${{ steps.version_info.outputs.generate_release == 'true' }}
       id: contributors
       shell: bash
       env:
@@ -361,8 +368,8 @@ runs:
 
 
     - name: Generate Release Notes
-      if: ${{ steps.version_info.outputs.skip_release_notes != 'true' }}
-      id: release_notes
+      if: ${{ steps.version_info.outputs.generate_release == 'true' }}
+      id: release
       shell: bash
       env:
         AZURE_OPENAI_ENDPOINT: ${{ inputs.azure_openai_endpoint }}
@@ -386,7 +393,7 @@ runs:
         echo "Debug: Git Information"
         echo "Latest version: $latest_version"
         echo "Previous version: $previous_version"
-        echo "Bump type: $bump_level"
+        echo "Bump level: $bump_level"
         
         # Get the first commit hash
         first_commit=$(git rev-list --max-parents=0 HEAD)
@@ -480,7 +487,7 @@ runs:
         cat release_notes.md
 
     - name: Append Contributors to Release Notes
-      if: ${{ inputs.closing_note != '' && steps.version_info.outputs.skip_release_notes != 'true' }}
+      if: ${{ inputs.closing_note != '' && steps.version_info.outputs.generate_release == 'true' }}
       id: append_contributors
       shell: bash
       run: |
@@ -495,7 +502,7 @@ runs:
         cat release_notes.md
 
     - name: Create GitHub Release
-      if: ${{ steps.version_info.outputs.skip_release_notes != 'true' }}
+      if: ${{ steps.version_info.outputs.generate_release == 'true' }}
       shell: bash
       env:
         GITHUB_TOKEN: ${{ github.token }}

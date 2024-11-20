@@ -19,6 +19,7 @@ jobs:
           fetch-depth: 0
       
       - name: Generate Draft Release
+        id: release
         uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@main
         with:
           azure_openai_endpoint: ${{ secrets.STRATUS_AZURE_OPENAI_API_ENDPOINT }}
@@ -32,6 +33,7 @@ jobs:
           append_context: "This repository is a monorepo containing multiple GitHub Actions composite actions, organized under the .github/actions folder, with each action in its own subfolder. If multiple actions are updated in the same release, the Release Notes should highlight the updated composite actions and group the updates under each respective composite action for better organization."
 
       - name: Comment Release Notes on PR
+        if: github.event_name == 'pull_request' && steps.release.outputs.bump_level != ''
         uses: actions/github-script@v7
         with:
           script: |

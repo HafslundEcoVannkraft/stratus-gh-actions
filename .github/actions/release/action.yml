@@ -157,12 +157,15 @@ runs:
           echo "Workflow triggered by a Pull Request. Fetching commits from the PR."
 
           # Fetch the list of commits in the pull request
-          pull_request_commits=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/commits | jq -r '.[].commit.message' | tr '[:upper:]' '[:lower:]')
+          pull_request_commits=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/commits | jq -r '.[].commit.message')
 
           # Extract the last commit message
-          commit_message=$(echo "$pull_request_commits" | tail -n 1 | tr '[:upper:]' '[:lower:]')
+          commit_message=$(echo "$pull_request_commits" | tr '[:upper:]' '[:lower:]')
 
           echo "Commit message from Pull Request: $commit_message"
+
+          # Get branch name
+          branch_name="${{ github.event.pull_request.head.ref }}"
         else
           # For push event
           echo "Workflow triggered by a direct push. Fetching the latest commit message from the branch."
@@ -186,7 +189,7 @@ runs:
         # Debugging: Check keyword matching
         echo "Checking commit message for keywords..."
 
-        # Determine bump type priority: major > minor > patch
+        # Determine bump type priority: major > minor > patch from commit message
         if [[ "$commit_message" == *"breaking change:"* ]] || [[ "$commit_message" == *"major:"* ]]; then  
           bump_level="major"  
           echo "Detected bump level: major"
@@ -200,20 +203,15 @@ runs:
           echo "No matching keywords found in the commit message."
         fi
 
-        # Debugging: Pre-release type detection
-        echo "Checking commit message for pre-release keywords..."
-        if [[ "$commit_message" == *"alpha:"* ]]; then  
-          pre_release_type="alpha"  
-          echo "Detected pre-release type: alpha"
-        elif [[ "$commit_message" == *"beta:"* ]]; then  
-          pre_release_type="beta"  
-          echo "Detected pre-release type: beta"
-        elif [[ "$commit_message" == *"rc:"* ]]; then  
-          pre_release_type="rc"  
-          echo "Detected pre-release type: rc"
-        elif [[ "$commit_message" == *"preview:"* ]]; then  
-          pre_release_type="preview"  
-          echo "Detected pre-release type: preview"
+        # If no bump_level from commits, check branch name
+        if [[ -z "$bump_level" ]]; then
+          if [[ "$branch_name" == major/* ]]; then
+            bump_level="major"
+          elif [[ "$branch_name" == feat/* ]] || [[ "$branch_name" == minor/* ]]; then
+            bump_level="minor"
+          elif [[ "$branch_name" == fix/* ]] || [[ "$branch_name" == patch/* ]]; then
+            bump_level="patch"
+          fi
         fi
 
         # If no bump_level is found, use default or skip new release
@@ -228,7 +226,22 @@ runs:
         # If skip_release_notes is not set, proceed with version calculation
 
         if [[ -z "$skip_release_notes" ]]; then
-          echo "No bump level detected; using default bump level: $bump_level"
+
+          # Pre-release type detection
+          echo "Checking commit message for pre-release keywords..."
+          if [[ "$commit_message" == *"alpha:"* ]]; then  
+            pre_release_type="alpha"  
+            echo "Detected pre-release type: alpha"
+          elif [[ "$commit_message" == *"beta:"* ]]; then  
+            pre_release_type="beta"  
+            echo "Detected pre-release type: beta"
+          elif [[ "$commit_message" == *"rc:"* ]]; then  
+            pre_release_type="rc"  
+            echo "Detected pre-release type: rc"
+          elif [[ "$commit_message" == *"preview:"* ]]; then  
+            pre_release_type="preview"  
+            echo "Detected pre-release type: preview"
+          fi
 
           # Debugging: Display final values
           echo "Final bump level: $bump_level"

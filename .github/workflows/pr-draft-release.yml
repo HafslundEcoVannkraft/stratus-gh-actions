@@ -19,7 +19,7 @@ jobs:
           fetch-depth: 0
       
       - id: release_draft
-        uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@250e20912d04bd5b1faca9fb62df87d2e60a1ced
+        uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@2b8c26e14d627772c2f17b267bc3cfdf5a04766c
         with:
           azure_openai_endpoint: ${{ secrets.STRATUS_AZURE_OPENAI_API_ENDPOINT }}
           azure_openai_deployment_name: gpt-4o
@@ -49,7 +49,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            releaseBody=$(echo "${{ steps.release.outputs.release_notes_base64}} | base64 -d)         
+            releaseBody=$(echo "${{ steps.release_draft.outputs.release_notes_base64 }} | base64 -d)         
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,

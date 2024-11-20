@@ -35,7 +35,10 @@ jobs:
       - name: Debug release outputs
         run: |
           echo "Composite action outputs:"
-          echo "${{ steps.release.outputs }}"
+          echo "version: ${{ steps.release.outputs.version }}"
+          echo "previous_version: ${{ steps.release.outputs.previous_version }}"
+          echo "bump_level: ${{ steps.release.outputs.bump_level }}"
+          echo "release_notes: ${{ steps.release.outputs.release_notes }}"
 
       - name: Comment Release Notes on PR
         if: ${{ steps.release.outputs.release_notes != '' }}

@@ -97,9 +97,9 @@ outputs:
   bump_level:
     description: "The type of version bump performed (major, minor, patch, or initial)"
     value: ${{ steps.version_info.outputs.bump_level }}
-  release_notes:
-    description: "The AI generated release note"
-    value: ${{ steps.release.outputs.release_notes }}
+  release_notes_base64:
+    description: "The AI generated release note in base64 encoding"
+    value: ${{ steps.create_release.outputs.release_notes_base64 }}
 
 runs:  
   using: "composite"  
@@ -502,6 +502,7 @@ runs:
         cat release_notes.md
 
     - name: Create GitHub Release
+      id: create_release
       if: ${{ steps.version_info.outputs.generate_release == 'true' }}
       shell: bash
       env:
@@ -515,6 +516,8 @@ runs:
         fi
 
         release_body=$(cat release_notes.md | jq -Rsa .)
+        release_notes=$(cat release_notes.md | base64 )
+
         
         echo "Debug: Creating release with:"
         echo "Tag: ${{ steps.version_info.outputs.new_version }}"

@@ -32,14 +32,15 @@ jobs:
           append_context: "This repository is a monorepo containing multiple GitHub Actions composite actions, organized under the .github/actions folder, with each action in its own subfolder. If multiple actions are updated in the same release, the Release Notes should categorize updates, improvments and bug fixes per composite action."
 
       - name: Comment Release Notes on PR
-        if: ${{ steps.release_draft.outputs.release_notes_base64 != '' }}
+        if: ${{ github.event_name == 'pull_request' && steps.release_draft.outputs.release_notes_base64 != '' }}
         uses: actions/github-script@v7
         with:
           script: |
             const releaseBody = Buffer.from('${{ steps.release_draft.outputs.release_notes_base64 }}', 'base64').toString();
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
+            const prNumber = context.payload.pull_request.number;
+            await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.name,
+              issue_number: prNumber,
               body: `## 📝 Generated Release Notes Preview\n\n${releaseBody}\n\nYou can review and edit these release notes in the draft release.`
             });

@@ -1,126 +1,160 @@
 name: "Version Bump and Release"
-description: "Bumps the version, creates a tag, and creates a GitHub release with AI-generated release notes using Azure OpenAI"
+description: "Bumps version, creates tag, and generates GitHub release with AI-powered release notes using Azure OpenAI"
 
 inputs:
+  # Release Configuration
   draft:
-    description: "Set the release as a draft"
+    description: "Create release as draft"
     required: false
     default: "true"
   prerelease:
-    description: "Mark the release as a pre-release"
+    description: "Mark as pre-release"
     required: false
     default: "true"
-  azure_openai_endpoint:
-    description: "Azure OpenAI endpoint URL (e.g., https://your-resource.openai.azure.com/)"
-    required: true
-  azure_openai_deployment_name:
-    description: "Azure OpenAI model deployment name"
-    required: true
-  azure_openai_api_key:
-    description: "Azure OpenAI key (optional if using Azure RBAC with GitHub OIDC federation)"
-    required: false
-  azure_client_id:
-    description: "Azure Client ID for OIDC federation"
-    required: false
-  azure_tenant_id:
-    description: "Azure Tenant ID for OIDC federation"
-    required: false
-  azure_subscription_id:
-    description: "Azure Subscription ID for OIDC federation"
-    required: false
-  azure_openai_api_version:
-    description: "Azure OpenAI API version"
-    required: true
-  temperature:
-    description: "Temperature for text generation (0.0-2.0)"
-    required: false
-    default: "0.2"
-  max_tokens:
-    description: "Maximum number of tokens in the response"
-    required: false
-    default: "4000"
-  top_p:
-    description: >-
-      Controls diversity of language model output. Lower values (e.g., 0.1) make responses more focused and deterministic,
-      while higher values (e.g., 0.9) allow more diverse and creative responses. Default 1.0 uses standard sampling.
-    required: false
-    default: "1.0"
-  frequency_penalty:
-    description: >-
-      Reduces word repetition by penalizing tokens based on their frequency in the text. Positive values decrease
-      repetition and encourage exploration of new topics, while negative values may increase focus on key themes.
-      Range: -2.0 (may increase repetition) to 2.0 (strongly discourages repetition).
-    required: false
-    default: "0.1"
-  presence_penalty:
-    description: >-
-      Influences topic diversity by penalizing tokens that have appeared at all in the text. Positive values encourage
-      the model to discuss new topics, while negative values increase focus on existing topics. Range: -2.0 (may
-      increase focus on existing topics) to 2.0 (strongly encourages new topics).
-    required: false
-    default: "0.1"
-  response_format:
-    description: "Response format (text or json_object)"
-    required: false
-    default: "text"
-  seed:
-    description: "Random number seed for deterministic outputs"
-    required: false
-    default: ""
   release_prefix:
     description: "Prefix for release titles"
     required: false
     default: ""
+  create_release:
+    description: "Create GitHub release (set false to only create semantic tags)"
+    default: "true"
+    required: false
+  create_release_notes:
+    description: "Generate AI release notes (set false to create release without notes)"
+    default: "true"
+    required: false
   validate_version_history:
     description: "Enable version history validation"
     required: false
     default: "true"
   closing_note:
-    description: "Provide a standarized closing note for all Release Notes"
+    description: "Standardized closing note template for release notes"
     required: false
     default: "\n\n## Closing Note\nA heartfelt thank you to all contributors: $contributors.\n"
-  append_context:
-    description: "Additional context to provide to Azure OpenAI for release notes generation."
-    required: false
-    default: ""
-  default_bump_level:  
-    description: "Specifies the default version bump level. Valid options are '', 'major', 'minor', or 'patch'. Setting this ensures a new version is created even if commit messages lack relevant keywords."  
+
+  # Version Control
+  default_bump_level:
+    description: "Default version bump level ('major', 'minor', 'patch', or '') if no keyword found in commits or branch name"
     required: false
 
+  # Azure OpenAI Configuration
+  azure_openai_endpoint:
+    description: "Azure OpenAI endpoint URL (https://your-resource.openai.azure.com/)"
+    required: false
+  azure_openai_deployment_name:
+    description: "Azure OpenAI model deployment name"
+    required: false
+  azure_openai_api_version:
+    description: "Azure OpenAI API version"
+    required: false
+  azure_openai_api_key:
+    description: "Azure OpenAI key (optional with Azure RBAC/OIDC)"
+    required: false
+
+  # Azure RBAC Configuration
+  azure_client_id:
+    description: "Azure Client ID for OIDC"
+    required: false
+  azure_tenant_id:
+    description: "Azure Tenant ID for OIDC"
+    required: false
+  azure_subscription_id:
+    description: "Azure Subscription ID for OIDC"
+    required: false
+
+  # AI Generation Parameters
+  temperature:
+    description: "AI temperature (0.0-2.0), higher is more creative"
+    required: false
+    default: "0.2"
+  max_tokens:
+    description: "Maximum tokens in response"
+    required: false
+    default: "4000"
+  top_p:
+    description: "Nucleus sampling threshold (0.1-1.0), lower is more focused"
+    required: false
+    default: "1.0"
+  frequency_penalty:
+    description: "Token frequency penalty (-2.0 to 2.0), positive reduces repetition"
+    required: false
+    default: "0.1"
+  presence_penalty:
+    description: "Topic presence penalty (-2.0 to 2.0), positive encourages new topics"
+    required: false
+    default: "0.1"
+  response_format:
+    description: "Response format (text/json_object)"
+    required: false
+    default: "text"
+  seed:
+    description: "Random seed for reproducible outputs"
+    required: false
+    default: ""
+  append_context:
+    description: "Additional context for release notes generation"
+    required: false
+    default: ""
+  
 outputs:
   new_version:
-    description: "The new version number that was created"
+    description: "Generated semantic version number (e.g., v1.2.3)"
     value: ${{ steps.version_info.outputs.new_version }}
   previous_version:
-    description: "The previous version used for comparison"
+    description: "Base version for comparison (e.g., v1.2.2)"
     value: ${{ steps.version_info.outputs.previous_version }}
   bump_level:
-    description: "The type of version bump performed (major, minor, patch, or initial)"
+    description: "Version increment type: major (x.0.0), minor (0.x.0), patch (0.0.x), or initial"
     value: ${{ steps.version_info.outputs.bump_level }}
   release_notes_base64:
-    description: "The AI generated release notes in base64 encoding"
+    description: "Base64-encoded AI-generated release notes"
     value: ${{ steps.create_release.outputs.release_notes_base64 }}
 
 runs:  
   using: "composite"  
   steps:  
-    - name: Validate Inputs  
+    - name: Validate Inputs
+      id: validate_inputs
       shell: bash  
-      run: |  
-        if [ -z "${{ inputs.azure_openai_endpoint }}" ]; then  
-          echo "Error: azure_openai_endpoint is required"  
-          exit 1  
-        fi  
-        if [[ "${{ inputs.azure_openai_endpoint }}" != "https://"* ]]; then  
-          echo "Error: azure_openai_endpoint must start with https://"  
-          exit 1  
-        fi  
-        # Validate the default_bump_level
+      run: |
+        # Set defaults and validate create_release flags
+        create_release="${{ inputs.create_release }}"
+        create_release_notes="${{ inputs.create_release_notes }}"
+        
+        # Validate default_bump_level
         valid_bump_levels=("major" "minor" "patch" "")  
         if [[ ! " ${valid_bump_levels[@]} " =~ " ${{ inputs.default_bump_level }} " ]]; then  
           echo "Error: Invalid default_bump_level value. Must be one of: 'major', 'minor', 'patch', or empty."  
           exit 1  
-        fi  
+        fi
+
+        # If create_release is false, force create_release_notes to false
+        if [[ "$create_release" != "true" ]]; then
+          create_release_notes="false"
+        fi
+
+        # Validate Azure OpenAI inputs if release notes are enabled
+        if [[ "$create_release_notes" == "true" ]]; then
+          if [ -z "${{ inputs.azure_openai_endpoint }}" ]; then  
+            echo "Error: azure_openai_endpoint is required when create_release_notes is true"  
+            exit 1  
+          fi  
+          if [[ "${{ inputs.azure_openai_endpoint }}" != "https://"* ]]; then  
+            echo "Error: azure_openai_endpoint must start with https://"  
+            exit 1  
+          fi
+          if [ -z "${{ inputs.azure_openai_deployment_name }}" ]; then
+            echo "Error: azure_openai_deployment_name is required when create_release_notes is true"
+            exit 1
+          fi
+          if [ -z "${{ inputs.azure_openai_api_version }}" ]; then
+            echo "Error: azure_openai_api_version is required when create_release_notes is true"
+            exit 1
+          fi
+        fi
+
+        echo "create_release_notes=$create_release_notes" >> "$GITHUB_OUTPUT"
+        echo "create_release=$create_release" >> "$GITHUB_OUTPUT"
   
     - name: Determine Version and Comparison Base  
       id: version_info  
@@ -220,19 +254,25 @@ runs:
           fi
         fi
 
-        generate_release="true"
+        create_tag="true"
+        create_release="${{ inputs.create_release }}"
+        create_release_notes="${{ steps.validate_inputs.outputs.create_release_notes }}"
 
-        # If no bump_level is found, use default or skip generate_release
+        # If no bump_level is found, use default or skip create_release
         if [[ -z "$bump_level" && -n "${{ inputs.default_bump_level }}" ]]; then
           bump_level="${{ inputs.default_bump_level }}"
         elif [[ -z "$bump_level" && -z "${{ inputs.default_bump_level }}" ]]; then
           echo "No bump level determined from commit message and no default_bump_level provided. The next steps will be skipped as no Release Notes should be generated."
-          generate_release="false"
-          echo "generate_release=" >> $GITHUB_OUTPUT
+          create_tag="false"
+          create_release="false"
+          create_release_notes="false"
         fi
 
-        if [[ $generate_release ]]; then
+        echo "create_tag=$create_tag" >> "$GITHUB_OUTPUT"
+        echo "create_release=$create_release" >> "$GITHUB_OUTPUT"
+        echo "create_release_notes=$create_release_notes" >> "$GITHUB_OUTPUT"
 
+        if [[ "$create_tag" == "true" ]]; then
           # Pre-release type detection
           echo "Checking commit message for pre-release keywords..."
           if [[ "$commit_message" == *"alpha:"* ]]; then  
@@ -292,7 +332,7 @@ runs:
         echo "pre_release_type=$pre_release_type" >> "$GITHUB_OUTPUT"
 
     - name: Set up Git
-      if: ${{ steps.version_info.outputs.generate_release == 'true' }}
+      if: ${{ steps.version_info.outputs.create_tag == 'true' }}
       shell: bash
       env:
         GIT_USER_NAME: "github-actions[bot]"
@@ -302,7 +342,7 @@ runs:
         git config --global user.email "$GIT_USER_EMAIL"
 
     - name: Tag new version
-      if: ${{ steps.version_info.outputs.generate_release == 'true' }}
+      if: ${{ steps.version_info.outputs.create_tag == 'true' }}
       shell: bash
       run: |
         set -e
@@ -310,7 +350,7 @@ runs:
         git push origin "${{ steps.version_info.outputs.new_version }}"
 
     - name: Azure login
-      if: ${{ !inputs.azure_openai_api_key && steps.version_info.outputs.generate_release == 'true' }}
+      if: ${{ steps.version_info.outputs.create_release_notes == 'true' }}
       uses: azure/login@v2
       with:
         client-id: ${{ inputs.azure_client_id }}
@@ -318,7 +358,7 @@ runs:
         subscription-id: ${{ inputs.azure_subscription_id }}
 
     - name: Configure Azure OpenAI
-      if: ${{ steps.version_info.outputs.generate_release == 'true' }}
+      if: ${{ steps.version_info.outputs.create_release_notes == 'true' }}
       id: azure_openai_config
       shell: bash
       env:
@@ -351,7 +391,7 @@ runs:
         echo "Debug: Azure OpenAI configuration complete"
 
     - name: Extract Contributors
-      if: ${{ steps.version_info.outputs.generate_release == 'true' }}
+      if: ${{ steps.version_info.outputs.create_release_notes == 'true' }}
       id: contributors
       shell: bash
       env:
@@ -367,7 +407,7 @@ runs:
 
 
     - name: Generate Release Notes
-      if: ${{ steps.version_info.outputs.generate_release == 'true' }}
+      if: ${{ steps.version_info.outputs.create_release_notes == 'true' }}
       id: release
       shell: bash
       env:
@@ -486,7 +526,7 @@ runs:
         cat release_notes.md
 
     - name: Append Contributors to Release Notes
-      if: ${{ inputs.closing_note != '' && steps.version_info.outputs.generate_release == 'true' }}
+      if: ${{ steps.version_info.outputs.create_release_notes == 'true' }}
       id: append_contributors
       shell: bash
       run: |
@@ -502,7 +542,7 @@ runs:
 
     - name: Create GitHub Release
       id: create_release
-      if: ${{ steps.version_info.outputs.generate_release == 'true' }}
+      if: ${{ steps.version_info.outputs.create_release == 'true' }}
       shell: bash
       env:
         GITHUB_TOKEN: ${{ github.token }}
@@ -514,7 +554,7 @@ runs:
           exit 1
         fi
 
-        release_body=$(cat release_notes.md | jq -Rsa .)
+        release_body=$(cat release_notes.md | jq -Rsa .) || echo ""
         echo "release_notes_base64=$(cat release_notes.md | base64 -w 0)" >> $GITHUB_OUTPUT
 
         echo "Debug: Creating release with:"

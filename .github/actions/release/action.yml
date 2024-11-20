@@ -277,15 +277,13 @@ runs:
             # Regular versioning without pre-release  
             new_version="v${new_major}.${new_minor}.${new_patch}"  
           fi  
-
-          # Output values for other steps  
-          {  
-            echo "new_version=$new_version"  
-            echo "previous_version=$base_tag"  
-            echo "bump_level=$bump_level"
-            echo "pre_release_type=$pre_release_type"  
-          } >> "$GITHUB_OUTPUT"
         fi
+
+        # Output values for other steps  
+        echo "new_version=$new_version" >> "$GITHUB_OUTPUT"
+        echo "previous_version=$base_tag" >> "$GITHUB_OUTPUT"
+        echo "bump_level=$bump_level" >> "$GITHUB_OUTPUT"
+        echo "pre_release_type=$pre_release_type" >> "$GITHUB_OUTPUT"
 
     - name: Set up Git
       if: ${{ steps.version_info.outputs.skip_release_notes != 'true' }}

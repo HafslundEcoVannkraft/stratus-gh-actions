@@ -157,7 +157,7 @@ runs:
           echo "Workflow triggered by a Pull Request. Fetching commits from the PR."
 
           # Fetch the list of commits in the pull request
-          pull_request_commits=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/commits | jq -r '.[].commit.message')
+          pull_request_commits=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/commits | jq -r '.[].commit.message' | tr '[:upper:]' '[:lower:]')
 
           # Extract the last commit message
           commit_message=$(echo "$pull_request_commits" | tail -n 1 | tr '[:upper:]' '[:lower:]')

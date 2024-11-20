@@ -33,13 +33,11 @@ jobs:
           append_context: "This repository is a monorepo containing multiple GitHub Actions composite actions, organized under the .github/actions folder, with each action in its own subfolder. If multiple actions are updated in the same release, the Release Notes should highlight the updated composite actions and group the updates under each respective composite action for better organization."
 
       - name: Comment Release Notes on PR
-        if: github.event_name == 'pull_request' && steps.release.outputs.bump_level != ''
+        if: steps.release.outputs.release_notes != ''
         uses: actions/github-script@v7
         with:
           script: |
-            const fs = require('fs');
-            const releaseNotes = fs.readFileSync('release_notes.md', 'utf8');
-            
+            releaseNotes=${{ steps.release.outputs.release_notes }}            
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,

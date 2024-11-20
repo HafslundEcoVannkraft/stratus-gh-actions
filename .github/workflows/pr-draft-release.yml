@@ -19,7 +19,7 @@ jobs:
           fetch-depth: 0
       
       - name: Generate Draft Release
-      - id: release_draft
+        id: release_draft
         uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@main
         with:
           azure_openai_endpoint: ${{ secrets.STRATUS_AZURE_OPENAI_API_ENDPOINT }}

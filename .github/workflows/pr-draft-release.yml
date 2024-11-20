@@ -37,10 +37,15 @@ jobs:
         with:
           script: |
             const releaseBody = Buffer.from('${{ steps.release_draft.outputs.release_notes_base64 }}', 'base64').toString();
-            const prNumber = context.payload.pull_request.number;
+            
+            console.log('Debug info:');
+            console.log('Owner:', '${{ github.repository_owner }}');
+            console.log('Repo:', '${{ github.repository }}'.split('/')[1]);
+            console.log('PR number:', '${{ github.event.pull_request.number }}');
+            
             await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.name,
-              issue_number: prNumber,
+              owner: '${{ github.repository_owner }}',
+              repo: '${{ github.repository }}'.split('/')[1],
+              issue_number: ${{ github.event.pull_request.number }},
               body: `## 📝 Generated Release Notes Preview\n\n${releaseBody}\n\nYou can review and edit these release notes in the draft release.`
             });

@@ -36,20 +36,20 @@ jobs:
           version: ${{ steps.release_draft.outputs.version }}
           previous_version: ${{ steps.release_draft.outputs.previous_version }}
           bump_level: ${{ steps.release_draft.outputs.bump_level }}
-          release_body: ${{ steps.release_draft.outputs.release_body }}
+          release_notes_base64: ${{ steps.release_draft.outputs.release_notes_base64 }}
         run: |
           echo "Composite action outputs:"
           echo "version: $version"
           echo "previous_version: $previous_version"
           echo "bump_level: $bump_level"
-          echo "release_body: $release_body"
+          echo "release_notes_base64: $release_notes_base64"
 
       - name: Comment Release Notes on PR
-        if: ${{ steps.release_draft.outputs.release_body != '' }}
+        if: ${{ steps.release_draft.outputs.release_notes_base64 != '' }}
         uses: actions/github-script@v7
         with:
           script: |
-            releaseBody=${{ steps.release.outputs.release_body }}            
+            releaseBody=$(echo "${{ steps.release.outputs.release_notes_base64}} | base64 -d)         
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,

@@ -88,18 +88,18 @@ inputs:
     required: false
 
 outputs:
-  version:
+  new_version:
     description: "The new version number that was created"
-    value: ${{ steps.version_info.outputs.version }}
+    value: ${{ steps.version_info.outputs.new_version }}
   previous_version:
     description: "The previous version used for comparison"
-    value: ${{ steps.version_info.outputs.previous_versiion }}
+    value: ${{ steps.version_info.outputs.previous_version }}
   bump_level:
     description: "The type of version bump performed (major, minor, patch, or initial)"
     value: ${{ steps.version_info.outputs.bump_level }}
-  release_body:
-    description: "The AI generated release note"
-    value: ${{ steps.create_release.outputs.release_body }}
+  release_notes_base64:
+    description: "The AI generated release notes in base64 encoding"
+    value: ${{ steps.create_release.outputs.release_notes_base64 }}
 
 runs:  
   using: "composite"  
@@ -515,9 +515,9 @@ runs:
         fi
 
         release_body=$(cat release_notes.md | jq -Rsa .)
-        echo "release_body=$release_body" >> "$GITHUB_OUTPUT"
+        release_notes_base64=$(cat release_notes.md | base64)
+        echo "release_notes_base64=$release_notes_base64" >> "$GITHUB_OUTPUT"
 
-        
         echo "Debug: Creating release with:"
         echo "Tag: ${{ steps.version_info.outputs.new_version }}"
         echo "Name: $RELEASE_PREFIX ${{ steps.version_info.outputs.new_version }}"

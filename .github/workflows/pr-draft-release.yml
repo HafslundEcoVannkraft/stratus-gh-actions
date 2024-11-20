@@ -32,6 +32,11 @@ jobs:
           prerelease: true  # Marks it as prerelease until merged
           append_context: "This repository is a monorepo containing multiple GitHub Actions composite actions, organized under the .github/actions folder, with each action in its own subfolder. If multiple actions are updated in the same release, the Release Notes should highlight the updated composite actions and group the updates under each respective composite action for better organization."
 
+      - name: Debug release outputs
+        run: |
+          echo "Composite action outputs:"
+          echo "${{ steps.release.outputs }}"
+
       - name: Comment Release Notes on PR
         if: ${{ steps.release.outputs.release_notes != '' }}
         uses: actions/github-script@v7

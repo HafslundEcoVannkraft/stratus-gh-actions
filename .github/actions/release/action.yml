@@ -424,7 +424,7 @@ runs:
         AZURE_TENANT_ID: ${{ inputs.azure_tenant_id }}
         AZURE_SUBSCRIPTION_ID: ${{ inputs.azure_subscription_id }}
       run: |
-        python3 generate_release_notes.py --draft ${{ inputs.draft }} --prerelease ${{ inputs.prerelease }} --context "${{ inputs.openai_context }}"
+        python3 scripts/generate_release_notes.py --draft ${{ inputs.draft }} --prerelease ${{ inputs.prerelease }} --context "${{ inputs.openai_context }}"
 
     - name: Append Contributors to Release Notes
       if: ${{ steps.version_info.outputs.create_release_notes == 'true' }}

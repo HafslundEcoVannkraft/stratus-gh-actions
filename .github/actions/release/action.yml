@@ -455,18 +455,21 @@ runs:
           pr_titles=$(git log $previous_version..HEAD --pretty=format:"%s" --grep "Merge pull request" | base64)
         fi
 
-        echo -e "\nDebug: Prepared Data"
-        echo "git_diff (Base64): ${git_diff:0:100}..." # Show first 100 chars for debugging
-        echo "commit_messages (Base64): ${commit_messages:0:100}..." # Show first 100 chars for debugging
-        echo "pr_titles (Base64): ${pr_titles:0:100}..." # Show first 100 chars for debugging
+        echo "$git_diff" > git_diff.txt
+        echo "$commit_messages" > commit_messages.txt
+        echo "$pr_titles" > pr_titles.txt
+
+        echo "Debug: git_diff size: $(echo -n "$git_diff" | wc -c) bytes"
+        echo "Debug: commit_messages size: $(echo -n "$commit_messages" | wc -c) bytes"
+        echo "Debug: pr_titles size: $(echo -n "$pr_titles" | wc -c) bytes"
 
         # Prepare the request body dynamically based on inputs
         request_body=$(jq -n \
           --arg latest "$latest_version" \
           --arg previous "$previous_version" \
-          --arg diff "$git_diff" \
-          --arg commits "$commit_messages" \
-          --arg prs "$pr_titles" \
+          --argfile diff git_diff.txt \
+          --argfile commits commit_messages.txt \
+          --argfile prs pr_titles.txt \
           --arg temp "$TEMPERATURE" \
           --arg max "$MAX_TOKENS" \
           --arg top "$TOP_P" \

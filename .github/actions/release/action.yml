@@ -485,7 +485,7 @@ runs:
               },
               {
                 role: "user",
-                content: "Generate a software release note based on a deep code and feature analyze of this full content. By default Include:\n1. A title: # Relase Note, do not include version information as this will be added automaticly within GitHub.\n2. A top section ##Summary.\n3. Sections for ### New Features, ### Bug Fixes and ### Improvements if relevant, this default structure can be overriden by the Additional context below.\n- Additional context: \($append)\n- Git diff base64: \($diff)\n- Commit messages base64: \($commits)\n- PR titles base64: \($prs)"
+                content: "Generate a software release note based on a deep code and feature analyze of this full content. By default Include:\n1. A title: # Relase Note, do not include version information as this will be added automaticly within GitHub.\n2. A top section ##Summary.\n3. Sections for ### New Features, ### Bug Fixes and ### Improvements if relevant, this default structure can be overriden by the Additional context below.\n- Additional context: \($append)\n- Git diff base64: \($diff.data)\n- Commit messages base64: \($commits.data)\n- PR titles base64: \($prs.data)"
               }
             ],
             temperature: ($temp|tonumber),

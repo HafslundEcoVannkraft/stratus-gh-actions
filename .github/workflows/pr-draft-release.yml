@@ -18,9 +18,9 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: ðŸ“£ Draft Release Notes
+      - name: Draft Release Notes
         id: release_draft
-        uses: .github/actions/release
+        uses: ./.github/actions/release
         with:
           azure_openai_endpoint: ${{ secrets.STRATUS_AZURE_OPENAI_API_ENDPOINT }}
           azure_openai_deployment_name: gpt-4o

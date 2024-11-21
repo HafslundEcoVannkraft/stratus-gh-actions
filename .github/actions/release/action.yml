@@ -425,6 +425,7 @@ runs:
         AZURE_SUBSCRIPTION_ID: ${{ inputs.azure_subscription_id }}
       run: |
         python3 scripts/generate_release_notes.py --draft ${{ inputs.draft }} --prerelease ${{ inputs.prerelease }} --context "${{ inputs.openai_context }}"
+      working-directory: ${{ github.action_path }}
 
     - name: Append Contributors to Release Notes
       if: ${{ steps.version_info.outputs.create_release_notes == 'true' }}

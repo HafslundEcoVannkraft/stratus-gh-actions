@@ -455,9 +455,10 @@ runs:
           pr_titles=$(git log $previous_version..HEAD --pretty=format:"%s" --grep "Merge pull request" | base64)
         fi
 
-        echo "$git_diff" > git_diff.txt
-        echo "$commit_messages" > commit_messages.txt
-        echo "$pr_titles" > pr_titles.txt
+        # Prepare JSON files with Base64-encoded content
+        echo "{\"data\": \"$git_diff\"}" > git_diff.json
+        echo "{\"data\": \"$commit_messages\"}" > commit_messages.json
+        echo "{\"data\": \"$pr_titles\"}" > pr_titles.json
 
         echo "Debug: git_diff size: $(echo -n "$git_diff" | wc -c) bytes"
         echo "Debug: commit_messages size: $(echo -n "$commit_messages" | wc -c) bytes"
@@ -467,9 +468,9 @@ runs:
         request_body=$(jq -n \
           --arg latest "$latest_version" \
           --arg previous "$previous_version" \
-          --argfile diff git_diff.txt \
-          --argfile commits commit_messages.txt \
-          --argfile prs pr_titles.txt \
+          --argfile diff git_diff.json \
+          --argfile commits commit_messages.json \
+          --argfile prs pr_titles.json \
           --arg temp "$TEMPERATURE" \
           --arg max "$MAX_TOKENS" \
           --arg top "$TOP_P" \

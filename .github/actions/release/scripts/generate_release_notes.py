@@ -2,7 +2,20 @@ import os
 import sys
 import json
 import requests
+import subprocess
 import argparse
+
+def get_azure_token():
+    """Retrieve an access token from Azure using OIDC."""
+    try:
+        token = subprocess.check_output(
+            ["az", "account", "get-access-token", "--resource", "https://cognitiveservices.azure.com/", "--query", "accessToken", "-o", "tsv"],
+            universal_newlines=True
+        ).strip()
+        return token
+    except subprocess.CalledProcessError as e:
+        print(f"Error retrieving Azure token: {e}")
+        sys.exit(1)
 
 def main():
     parser = argparse.ArgumentParser(description="Generate release notes using Azure OpenAI")
@@ -16,9 +29,9 @@ def main():
     endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
     deployment_name = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
     api_version = os.getenv("AZURE_OPENAI_API_VERSION")
-    client_id = os.getenv("AZURE_CLIENT_ID")
-    tenant_id = os.getenv("AZURE_TENANT_ID")
-    subscription_id = os.getenv("AZURE_SUBSCRIPTION_ID")
+
+    # Retrieve the token
+    token = get_azure_token()
 
     # Prepare the payload
     payload = {
@@ -41,7 +54,7 @@ def main():
 
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {os.getenv('AZURE_OPENAI_API_KEY')}"
+        "Authorization": f"Bearer {token}"
     }
 
     # Make the API request

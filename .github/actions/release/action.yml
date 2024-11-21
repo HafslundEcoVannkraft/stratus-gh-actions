@@ -455,10 +455,10 @@ runs:
           pr_titles=$(git log $previous_version..HEAD --pretty=format:"%s" --grep "Merge pull request" | base64)
         fi
 
-        # Prepare JSON files with Base64-encoded content
-        echo "{\"data\": \"$git_diff\"}" > git_diff.json
-        echo "{\"data\": \"$commit_messages\"}" > commit_messages.json
-        echo "{\"data\": \"$pr_titles\"}" > pr_titles.json
+        # Escape Base64 content and write to JSON files
+        echo "{\"data\": $(echo "$git_diff" | jq -Rsa .)}" > git_diff.json
+        echo "{\"data\": $(echo "$commit_messages" | jq -Rsa .)}" > commit_messages.json
+        echo "{\"data\": $(echo "$pr_titles" | jq -Rsa .)}" > pr_titles.json
 
         echo "Debug: git_diff size: $(echo -n "$git_diff" | wc -c) bytes"
         echo "Debug: commit_messages size: $(echo -n "$commit_messages" | wc -c) bytes"

@@ -5,8 +5,6 @@ on:
     branches:
       - "test/**" # For testing branches
       - "feat/**" # For feature branches
-    branches-ignore:
-      - main
     paths:
       - ".github/actions/**"
       - ".github/workflows/test-composite-actions-in-branch.yml"

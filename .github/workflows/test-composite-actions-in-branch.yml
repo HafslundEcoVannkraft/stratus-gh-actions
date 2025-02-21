@@ -24,7 +24,7 @@ jobs:
           fetch-depth: 0
 
       - name: Azure Login
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
           client-id: ${{ vars.STRATUS_AZURE_OPENAI_CLIENT_ID }}
           tenant-id: ${{ vars.STRATUS_AZURE_OPENAI_TENANT_ID }}

@@ -1,0 +1,61 @@
+name: Test Composite Actions in Branch
+
+on:
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - ".github/actions/**"
+      - ".github/workflows/test-composite-actions-in-branch.yml"
+
+jobs:
+  test-release-action:
+    name: Test Release Action
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    permissions:
+      contents: write
+      pull-requests: read
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Test Local Release Action
+        uses: ./.github/actions/release
+        with:
+          draft: true
+          prerelease: true
+          release_prefix: "[TEST-INTEGRATION] Composite Action Verification"
+          azure_openai_endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          azure_openai_deployment_name: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
+          azure_openai_api_version: "2023-05-15"
+          azure_client_id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
+          azure_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          validate_version_history: true
+          default_bump_level: "patch"
+
+      - name: Delete Test Release and Tag
+        if: always()
+        run: |
+          # Get the latest release
+          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases/latest --jq .id)
+
+          # Check if it's a test release
+          IS_TEST=$(gh api repos/${{ github.repository }}/releases/$RELEASE_ID --jq '.name | startswith("[TEST-INTEGRATION]")')
+
+          if [ "$IS_TEST" = "true" ]; then
+            echo "Deleting test release..."
+            gh api -X DELETE repos/${{ github.repository }}/releases/$RELEASE_ID
+
+            # Get and delete the associated tag
+            TAG=$(gh api repos/${{ github.repository }}/releases/$RELEASE_ID --jq .tag_name)
+            git push --delete origin $TAG || true
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  # Add more jobs here for testing other composite actions

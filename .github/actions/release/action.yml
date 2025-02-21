@@ -95,7 +95,7 @@ inputs:
     description: "Additional context for release notes generation"
     required: false
     default: ""
-  
+
 outputs:
   new_version:
     description: "Generated semantic version number (e.g., v1.2.3)"
@@ -110,22 +110,22 @@ outputs:
     description: "Base64-encoded AI-generated release notes"
     value: ${{ steps.create_release.outputs.release_notes_base64 }}
 
-runs:  
-  using: "composite"  
-  steps:  
+runs:
+  using: "composite"
+  steps:
     - name: Validate Inputs
       id: validate_inputs
-      shell: bash  
+      shell: bash
       run: |
         # Set defaults and validate create_release flags
         create_release="${{ inputs.create_release }}"
         create_release_notes="${{ inputs.create_release_notes }}"
-        
+
         # Validate default_bump_level
-        valid_bump_levels=("major" "minor" "patch" "")  
-        if [[ ! " ${valid_bump_levels[@]} " =~ " ${{ inputs.default_bump_level }} " ]]; then  
-          echo "Error: Invalid default_bump_level value. Must be one of: 'major', 'minor', 'patch', or empty."  
-          exit 1  
+        valid_bump_levels=("major" "minor" "patch" "")
+        if [[ ! " ${valid_bump_levels[@]} " =~ " ${{ inputs.default_bump_level }} " ]]; then
+          echo "Error: Invalid default_bump_level value. Must be one of: 'major', 'minor', 'patch', or empty."
+          exit 1
         fi
 
         # If create_release is false, force create_release_notes to false
@@ -135,13 +135,13 @@ runs:
 
         # Validate Azure OpenAI inputs if release notes are enabled
         if [[ "$create_release_notes" == "true" ]]; then
-          if [ -z "${{ inputs.azure_openai_endpoint }}" ]; then  
-            echo "Error: azure_openai_endpoint is required when create_release_notes is true"  
-            exit 1  
-          fi  
-          if [[ "${{ inputs.azure_openai_endpoint }}" != "https://"* ]]; then  
-            echo "Error: azure_openai_endpoint must start with https://"  
-            exit 1  
+          if [ -z "${{ inputs.azure_openai_endpoint }}" ]; then
+            echo "Error: azure_openai_endpoint is required when create_release_notes is true"
+            exit 1
+          fi
+          if [[ "${{ inputs.azure_openai_endpoint }}" != "https://"* ]]; then
+            echo "Error: azure_openai_endpoint must start with https://"
+            exit 1
           fi
           if [ -z "${{ inputs.azure_openai_deployment_name }}" ]; then
             echo "Error: azure_openai_deployment_name is required when create_release_notes is true"
@@ -155,16 +155,16 @@ runs:
 
         echo "create_release_notes=$create_release_notes" >> "$GITHUB_OUTPUT"
         echo "create_release=$create_release" >> "$GITHUB_OUTPUT"
-  
-    - name: Determine Version and Comparison Base  
-      id: version_info  
+
+    - name: Determine Version and Comparison Base
+      id: version_info
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
-      run: |  
-        set -e  
-  
-        # Function to get the latest tag in the current HEAD history  
+      run: |
+        set -e
+
+        # Function to get the latest tag in the current HEAD history
         get_latest_branch_tag() {
           # Fetch all tags
           git fetch --tags > /dev/null 2>&1
@@ -176,11 +176,11 @@ runs:
           echo "${latest_tag:-v0.0.0}"
         }
 
-        # Get the latest tag in the current branch  
+        # Get the latest tag in the current branch
         base_tag=$(get_latest_branch_tag)
-        echo "Current base tag in HEAD history: $base_tag"  
-  
-        # Parse version components  
+        echo "Current base tag in HEAD history: $base_tag"
+
+        # Parse version components
         if [[ $base_tag == "v0.0.0" ]]; then
           major=0
           minor=0
@@ -190,7 +190,7 @@ runs:
           minor=$(echo $base_tag | cut -d. -f2)
           patch=$(echo $base_tag | cut -d. -f3 | cut -d- -f1)
         fi
-  
+
         # Check the event type
         if [[ "${{ github.event_name }}" == "pull_request" ]]; then
           # For pull request event
@@ -223,21 +223,21 @@ runs:
         echo "Fetched commit message: '$commit_message'"
 
         # Initialize bump_level and pre_release_type
-        bump_level=""  
-        pre_release_type=""  
+        bump_level=""
+        pre_release_type=""
 
         # Debugging: Check keyword matching
         echo "Checking commit message for keywords..."
 
         # Determine bump type priority: major > minor > patch from commit message
-        if [[ "$commit_message" == *"breaking change:"* ]] || [[ "$commit_message" == *"major:"* ]]; then  
-          bump_level="major"  
+        if [[ "$commit_message" == *"breaking change:"* ]] || [[ "$commit_message" == *"major:"* ]]; then
+          bump_level="major"
           echo "Detected bump level: major"
-        elif [[ "$commit_message" == *"feat:"* ]] || [[ "$commit_message" == *"minor:"* ]]; then  
-          bump_level="minor"  
+        elif [[ "$commit_message" == *"feat:"* ]] || [[ "$commit_message" == *"minor:"* ]]; then
+          bump_level="minor"
           echo "Detected bump level: minor"
-        elif [[ "$commit_message" == *"fix:"* ]] || [[ "$commit_message" == *"patch:"* ]]; then  
-          bump_level="patch"  
+        elif [[ "$commit_message" == *"fix:"* ]] || [[ "$commit_message" == *"patch:"* ]]; then
+          bump_level="patch"
           echo "Detected bump level: patch"
         else
           echo "No matching keywords found in the commit message."
@@ -275,17 +275,17 @@ runs:
         if [[ "$create_tag" == "true" ]]; then
           # Pre-release type detection
           echo "Checking commit message for pre-release keywords..."
-          if [[ "$commit_message" == *"alpha:"* ]]; then  
-            pre_release_type="alpha"  
+          if [[ "$commit_message" == *"alpha:"* ]]; then
+            pre_release_type="alpha"
             echo "Detected pre-release type: alpha"
-          elif [[ "$commit_message" == *"beta:"* ]]; then  
-            pre_release_type="beta"  
+          elif [[ "$commit_message" == *"beta:"* ]]; then
+            pre_release_type="beta"
             echo "Detected pre-release type: beta"
-          elif [[ "$commit_message" == *"rc:"* ]]; then  
-            pre_release_type="rc"  
+          elif [[ "$commit_message" == *"rc:"* ]]; then
+            pre_release_type="rc"
             echo "Detected pre-release type: rc"
-          elif [[ "$commit_message" == *"preview:"* ]]; then  
-            pre_release_type="preview"  
+          elif [[ "$commit_message" == *"preview:"* ]]; then
+            pre_release_type="preview"
             echo "Detected pre-release type: preview"
           fi
 
@@ -294,38 +294,38 @@ runs:
           echo "Final pre-release type: $pre_release_type"
 
           # Calculate new version
-          new_major=$major  
-          new_minor=$minor  
-          new_patch=$patch  
+          new_major=$major
+          new_minor=$minor
+          new_patch=$patch
 
           # Apply version bump
-          if [[ "$bump_level" == "major" ]]; then  
-            new_major=$((major + 1))  
-            new_minor=0  
-            new_patch=0  
-          elif [[ "$bump_level" == "minor" ]]; then  
-            new_minor=$((minor + 1))  
-            new_patch=0  
-          elif [[ "$bump_level" == "patch" ]]; then  
-            new_patch=$((patch + 1))  
+          if [[ "$bump_level" == "major" ]]; then
+            new_major=$((major + 1))
+            new_minor=0
+            new_patch=0
+          elif [[ "$bump_level" == "minor" ]]; then
+            new_minor=$((minor + 1))
+            new_patch=0
+          elif [[ "$bump_level" == "patch" ]]; then
+            new_patch=$((patch + 1))
           fi
 
           # Handle pre-release versioning
-          if [[ -n "$pre_release_type" ]]; then  
-            current_pre_release=$(git tag --sort=-v:refname | grep "^v${new_major}.${new_minor}.${new_patch}-${pre_release_type}" | head -n 1 || echo "")  
-            if [[ -z "$current_pre_release" ]]; then  
-              new_version="v${new_major}.${new_minor}.${new_patch}-${pre_release_type}.1"  
-            else  
-              current_number=$(echo $current_pre_release | awk -F- '{print $2}' | cut -d'.' -f2)  
-              new_version="v${new_major}.${new_minor}.${new_patch}-${pre_release_type}.$((current_number + 1))"  
-            fi  
-          else  
-            # Regular versioning without pre-release  
-            new_version="v${new_major}.${new_minor}.${new_patch}"  
-          fi  
+          if [[ -n "$pre_release_type" ]]; then
+            current_pre_release=$(git tag --sort=-v:refname | grep "^v${new_major}.${new_minor}.${new_patch}-${pre_release_type}" | head -n 1 || echo "")
+            if [[ -z "$current_pre_release" ]]; then
+              new_version="v${new_major}.${new_minor}.${new_patch}-${pre_release_type}.1"
+            else
+              current_number=$(echo $current_pre_release | awk -F- '{print $2}' | cut -d'.' -f2)
+              new_version="v${new_major}.${new_minor}.${new_patch}-${pre_release_type}.$((current_number + 1))"
+            fi
+          else
+            # Regular versioning without pre-release
+            new_version="v${new_major}.${new_minor}.${new_patch}"
+          fi
         fi
 
-        # Output values for other steps  
+        # Output values for other steps
         echo "new_version=$new_version" >> "$GITHUB_OUTPUT"
         echo "previous_version=$base_tag" >> "$GITHUB_OUTPUT"
         echo "bump_level=$bump_level" >> "$GITHUB_OUTPUT"
@@ -405,7 +405,6 @@ runs:
         echo "Contributors identified: $contributors"
         echo "contributors=$contributors" >> $GITHUB_OUTPUT
 
-
     - name: Generate Release Notes
       if: ${{ steps.version_info.outputs.create_release_notes == 'true' }}
       id: release
@@ -414,13 +413,6 @@ runs:
         AZURE_OPENAI_ENDPOINT: ${{ inputs.azure_openai_endpoint }}
         AZURE_OPENAI_DEPLOYMENT_NAME: ${{ inputs.azure_openai_deployment_name }}
         AZURE_OPENAI_API_VERSION: ${{ inputs.AZURE_OPENAI_API_VERSION }}
-        TEMPERATURE: ${{ inputs.temperature }}
-        MAX_TOKENS: ${{ inputs.max_tokens }}
-        TOP_P: ${{ inputs.top_p }}
-        FREQUENCY_PENALTY: ${{ inputs.frequency_penalty }}
-        PRESENCE_PENALTY: ${{ inputs.presence_penalty }}
-        RESPONSE_FORMAT: ${{ inputs.response_format }}
-        SEED: ${{ inputs.seed }}
         AUTH_HEADER: ${{ steps.azure_openai_config.outputs.auth_header }}
       run: |
         latest_version="${{ steps.version_info.outputs.new_version }}"
@@ -433,11 +425,11 @@ runs:
         echo "Latest version: $latest_version"
         echo "Previous version: $previous_version"
         echo "Bump level: $bump_level"
-        
+
         # Get the first commit hash
         first_commit=$(git rev-list --max-parents=0 HEAD)
         echo "First commit: $first_commit"
-        
+
         # Handle first release differently
         if [[ "$previous_version" == "v0.0.0" ]]; then
           echo "Initial release - getting all changes since first commit"
@@ -460,65 +452,41 @@ runs:
         echo "commit_messages (Base64): ${commit_messages:0:100}..." # Show first 100 chars for debugging
         echo "pr_titles (Base64): ${pr_titles:0:100}..." # Show first 100 chars for debugging
 
-        # Prepare the request body dynamically based on inputs
-        request_body=$(jq -n \
-          --arg latest "$latest_version" \
-          --arg previous "$previous_version" \
+        # Install Python dependencies
+        python3 -m pip install requests >/dev/null 2>&1 || true
+
+        # Prepare parameters for Python script
+        params=$(jq -n \
           --arg diff "$git_diff" \
           --arg commits "$commit_messages" \
           --arg prs "$pr_titles" \
-          --arg temp "$TEMPERATURE" \
-          --arg max "$MAX_TOKENS" \
-          --arg top "$TOP_P" \
-          --arg freq "$FREQUENCY_PENALTY" \
-          --arg pres "$PRESENCE_PENALTY" \
-          --arg append "$APPEND_CONTEXT" \
+          --arg append "${{ inputs.append_context }}" \
+          --arg temp "${{ inputs.temperature }}" \
+          --arg max "${{ inputs.max_tokens }}" \
+          --arg top "${{ inputs.top_p }}" \
+          --arg freq "${{ inputs.frequency_penalty }}" \
+          --arg pres "${{ inputs.presence_penalty }}" \
+          --arg fmt "${{ inputs.response_format }}" \
+          --arg seed "${{ inputs.seed }}" \
           '{
-            messages: [
-              {
-                role: "system",
-                content: "You are a professional technical writer and code expert specializing in generating concise and consistent release notes for software releases based on inputs from Base64-encoded git diff, commit messages, pull-request messages, and titles. Decode the Base64 strings before analyzing it."
-              },
-              {
-                role: "user",
-                content: "Generate a software release note based on a deep code and feature analyze of this full content. By default Include:\n1. A title: # Relase Note, do not include version information as this will be added automaticly within GitHub.\n2. A top section ##Summary.\n3. Sections for ### New Features, ### Bug Fixes and ### Improvements if relevant, this default structure can be overriden by the Additional context below.\n- Additional context: \($append)\n- Git diff base64: \($diff)\n- Commit messages base64: \($commits)\n- PR titles base64: \($prs)"
-              }
-            ],
-            temperature: ($temp|tonumber),
-            max_tokens: ($max|tonumber),
-            top_p: ($top|tonumber),
-            frequency_penalty: ($freq|tonumber),
-            presence_penalty: ($pres|tonumber)
+            "git_diff": $diff,
+            "commit_messages": $commits,
+            "pr_titles": $prs,
+            "append_context": $append,
+            "temperature": ($temp|tonumber),
+            "max_tokens": ($max|tonumber),
+            "top_p": ($top|tonumber),
+            "frequency_penalty": ($freq|tonumber),
+            "presence_penalty": ($pres|tonumber),
+            "response_format": $fmt,
+            "seed": (if $seed == "" then null else ($seed|tonumber) end)
           }')
 
-        echo "Debug: Request body prepared"
-        echo "$request_body" | jq '.'
+        # Call Python script
+        python3 $GITHUB_ACTION_PATH/src/openai_request.py "$params"
 
-        # Add response format if specified and not default
-        if [ -n "$RESPONSE_FORMAT" ] && [ "$RESPONSE_FORMAT" != "text" ]; then
-          request_body=$(echo "$request_body" | jq --arg fmt "$RESPONSE_FORMAT" '. + {response_format: {type: $fmt}}')
-        fi
-
-        # Add seed if specified
-        if [ -n "$SEED" ]; then
-          request_body=$(echo "$request_body" | jq --arg seed "$SEED" '. + {seed: ($seed|tonumber)}')
-        fi
-
-        echo "Debug: Request body prepared after extra properties"
-        echo "$request_body" | jq '.'
-
-        response=$(curl -s -X POST "$AZURE_OPENAI_ENDPOINT/openai/deployments/$AZURE_OPENAI_DEPLOYMENT_NAME/chat/completions?api-version=$AZURE_OPENAI_API_VERSION" \
-          -H "Content-Type: application/json" \
-          -H "$AUTH_HEADER" \
-          -d "$request_body")
-
-        echo "Debug: Full API Response:"
-        echo "$response" | jq '.'
-
-        if ! echo "$response" | jq -r '.choices[0].message.content' > release_notes.md; then
-          echo "Error: Failed to extract content from response"
-          echo "Response structure:"
-          echo "$response" | jq '.'
+        if [ ! -f release_notes.md ]; then
+          echo "Error: Failed to generate release notes"
           exit 1
         fi
 
@@ -560,7 +528,7 @@ runs:
         echo "Debug: Creating release with:"
         echo "Tag: ${{ steps.version_info.outputs.new_version }}"
         echo "Name: $RELEASE_PREFIX ${{ steps.version_info.outputs.new_version }}"
-        
+
         response=$(curl -v -X POST "https://api.github.com/repos/${{ github.repository }}/releases" \
           -H "Authorization: token $GITHUB_TOKEN" \
           -H "Content-Type: application/json" \

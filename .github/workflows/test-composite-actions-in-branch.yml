@@ -27,9 +27,9 @@ jobs:
       - name: Azure Login
         uses: azure/login@v2
         with:
-          client-id: ${{ vars.STRATUS_AZURE_OPENAI_CLIENT_ID }}
-          tenant-id: ${{ vars.STRATUS_AZURE_OPENAI_TENANT_ID }}
-          subscription-id: ${{ vars.STRATUS_AZURE_OPENAI_SUBSCRIPTION_ID }}
+          client-id: ${{ secrets.STRATUS_AZURE_OPENAI_CLIENT_ID }}
+          tenant-id: ${{ secrets.STRATUS_AZURE_OPENAI_TENANT_ID }}
+          subscription-id: ${{ secrets.STRATUS_AZURE_OPENAI_SUBSCRIPTION_ID }}
 
       - name: Test Local Release Action
         uses: ./.github/actions/release
@@ -41,9 +41,9 @@ jobs:
           azure_openai_endpoint: ${{ vars.STRATUS_AZURE_OPENAI_API_ENDPOINT }}
           azure_openai_deployment_name: "gpt-4" # Assuming this is the deployment name
           azure_openai_api_version: "2023-05-15"
-          azure_client_id: ${{ vars.STRATUS_AZURE_OPENAI_CLIENT_ID }}
-          azure_tenant_id: ${{ vars.STRATUS_AZURE_OPENAI_TENANT_ID }}
-          azure_subscription_id: ${{ vars.STRATUS_AZURE_OPENAI_SUBSCRIPTION_ID }}
+          azure_client_id: ${{ secrets.STRATUS_AZURE_OPENAI_CLIENT_ID }}
+          azure_tenant_id: ${{ secrets.STRATUS_AZURE_OPENAI_TENANT_ID }}
+          azure_subscription_id: ${{ secrets.STRATUS_AZURE_OPENAI_SUBSCRIPTION_ID }}
           validate_version_history: true
           default_bump_level: "patch"
 

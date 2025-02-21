@@ -32,6 +32,15 @@ jobs:
           tenant-id: ${{ secrets.STRATUS_AZURE_OPENAI_TENANT_ID }}
           subscription-id: ${{ secrets.STRATUS_AZURE_OPENAI_SUBSCRIPTION_ID }}
 
+      - name: Debug Azure OpenAI API
+        if: always()
+        shell: bash
+        run: |
+          echo "Testing Azure OpenAI API connection..."
+          token=$(az account get-access-token --resource https://cognitiveservices.azure.com/ --query accessToken -o tsv)
+          curl -v -X GET "${{ secrets.STRATUS_AZURE_OPENAI_API_ENDPOINT }}/openai/deployments?api-version=2023-05-15" \
+            -H "Authorization: Bearer $token"
+
       - name: Test Local Release Action
         uses: ./.github/actions/release
         with:

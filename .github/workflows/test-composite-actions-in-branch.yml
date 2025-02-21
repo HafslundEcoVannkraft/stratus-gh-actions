@@ -38,7 +38,7 @@ jobs:
         run: |
           echo "Testing Azure OpenAI API connection..."
           token=$(az account get-access-token --resource https://cognitiveservices.azure.com/ --query accessToken -o tsv)
-          curl -v -X GET "${{ secrets.STRATUS_AZURE_OPENAI_API_ENDPOINT }}/openai/deployments?api-version=2023-05-15" \
+          curl -v -X GET "${{ secrets.STRATUS_AZURE_OPENAI_API_ENDPOINT }}/openai/deployments?api-version=2024-10-01" \
             -H "Authorization: Bearer $token"
 
       - name: Test Local Release Action
@@ -50,7 +50,7 @@ jobs:
           create_release_notes: true # Enable AI release notes
           azure_openai_endpoint: ${{ secrets.STRATUS_AZURE_OPENAI_API_ENDPOINT }}
           azure_openai_deployment_name: "gpt-4" # Assuming this is the deployment name
-          azure_openai_api_version: "2023-05-15"
+          azure_openai_api_version: "2024-10-21"
           azure_client_id: ${{ secrets.STRATUS_AZURE_OPENAI_CLIENT_ID }}
           azure_tenant_id: ${{ secrets.STRATUS_AZURE_OPENAI_TENANT_ID }}
           azure_subscription_id: ${{ secrets.STRATUS_AZURE_OPENAI_SUBSCRIPTION_ID }}

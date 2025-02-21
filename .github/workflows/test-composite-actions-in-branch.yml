@@ -2,6 +2,9 @@ name: Test Composite Actions in Branch
 
 on:
   push:
+    branches:
+      - "test/**" # For testing branches
+      - "feat/**" # For feature branches
     branches-ignore:
       - main
     paths:
@@ -38,7 +41,7 @@ jobs:
           prerelease: true
           release_prefix: "[TEST-INTEGRATION] Composite Action Verification"
           create_release_notes: true # Enable AI release notes
-          azure_openai_endpoint: ${{ vars.STRATUS_AZURE_OPENAI_API_ENDPOINT }}
+          azure_openai_endpoint: ${{ secrets.STRATUS_AZURE_OPENAI_API_ENDPOINT }}
           azure_openai_deployment_name: "gpt-4" # Assuming this is the deployment name
           azure_openai_api_version: "2023-05-15"
           azure_client_id: ${{ secrets.STRATUS_AZURE_OPENAI_CLIENT_ID }}

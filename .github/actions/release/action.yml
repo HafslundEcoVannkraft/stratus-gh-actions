@@ -422,11 +422,11 @@ runs:
         RESPONSE_FORMAT: ${{ inputs.response_format }}
         SEED: ${{ inputs.seed }}
         AUTH_HEADER: ${{ steps.azure_openai_config.outputs.auth_header }}
+        contributors: ${{ steps.contributors.outputs.contributors }}
       run: |
         latest_version="${{ steps.version_info.outputs.new_version }}"
         previous_version="${{ steps.version_info.outputs.previous_version }}"
         bump_level="${{ steps.version_info.outputs.bump_level }}"
-        contributors="${{ steps.contributors.outputs.contributors }}"
         append_context="${{ inputs.append_context }}"
 
         echo "Debug: Git Information"

@@ -1,0 +1,32 @@
+# GitHub Release Configuration
+# This file configures how GitHub auto-generates release notes
+# 
+# IMPORTANT: This file ONLY controls release notes categorization
+# It does NOT determine version numbers (major/minor/patch)
+# Version bumping is handled by the workflow logic based on PR labels
+
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+    authors:
+      - dependabot
+  categories:
+    - title: 🚀 Features
+      labels:
+        - enhancement
+        - feature
+    - title: 🐛 Bug Fixes
+      labels:
+        - bug
+        - bugfix
+    - title: 📚 Documentation
+      labels:
+        - documentation
+    - title: 🔧 Maintenance
+      labels:
+        - maintenance
+        - chore
+    - title: ⚠️ Breaking Changes
+      labels:
+        - breaking-change 

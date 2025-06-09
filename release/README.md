@@ -1,112 +1,132 @@
-# Version Bump and Release Action
+# Simple Version Bump and Release Action
 
-A GitHub Action that automates version bumping, tag creation, and release generation with AI-powered release notes using Azure OpenAI.
-
-## Table of Contents
-- [Features](#features)
-- [Requirements](#requirements)
-- [Version Format](#version-format)
-- [Initial Release](#initial-release)
-- [Version Bumping Rules](#version-bumping-rules)
-  - [Commit Message Detection](#commit-message-detection)
-  - [Branch Name Detection](#branch-name-detection)
-  - [Pre-release Versions](#pre-release-versions)
-- [Inputs](#inputs)
-- [Outputs](#outputs)
-- [Usage Examples](#examples)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [License](#license)
+A lightweight GitHub Action that automates version bumping, tag creation, and release generation using GitHub's native release notes.
 
 ## Features
-- 🔄 Automatic version bumping based on commit messages or branch names
+
+- 🔄 Automatic version bumping based on PR labels or commit messages
 - 🏷️ Git tag creation and management
-- 📝 AI-generated release notes using Azure OpenAI
-- 🔑 Support for both Azure RBAC and API key authentication
-- 🎯 Configurable version bump rules
-- 📋 Custom release note formatting
-- 🏗️ Support for pre-release versions (alpha, beta, rc, preview)
+- 📝 Native GitHub release notes generation (no external dependencies)
+- 🎯 Simple and reliable
+- 📋 Zero configuration required
 
-## Requirements
-- GitHub Actions runner: Ubuntu Latest
-- Repository permissions: `contents: write`, `pull-requests: write` (if commenting on PRs)
-- Azure OpenAI: Example with GPT-4o model deployment (for release notes generation)
-- Git: Fetch depth 0 for full history (`fetch-depth: 0` in checkout action)
+## How It Works
 
-## Version Format
-This action uses semantic versioning with the following format:
-- Regular releases: `vX.Y.Z` (e.g., `v1.0.0`)
-- Pre-releases: `vX.Y.Z-type.N` (e.g., `v1.0.0-preview.1`)
-
-The `v` prefix is always included in tags and version numbers for consistency.
-
-## Initial Release
-For the first release in a repository:
-- Base version: `v0.0.0`
-- Includes all changes since first commit
-- Version determined by commit messages, branch name or input `default_bump_level`
-- Typically results in `v0.1.0` (features) or `v1.0.0` (major release)
+1. **For Pull Requests**: Reads PR labels to determine version bump
+2. **For Push Events**: Parses commit messages for version keywords
+3. Creates a new semantic version tag
+4. Generates a GitHub release with native release notes
 
 ## Version Bumping Rules
 
-### Commit Message Detection
-- **Major Version** (`vX.y.z`): `breaking change:` or `major:`
-- **Minor Version** (`vx.Y.z`): `feat:` or `minor:`
-- **Patch Version** (`vx.y.Z`): `fix:` or `patch:`
+### PR Labels (Priority)
+- `breaking-change` or `major` → Major version (vX.0.0)
+- `enhancement`, `feature`, or `minor` → Minor version (v0.X.0)
+- Any other labels or no labels → Patch version (v0.0.X)
 
-### Branch Name Detection
-If no commit message keywords are found, checks branch name:
-- **Major**: `major/*`
-- **Minor**: `feat/*` or `minor/*`
-- **Patch**: `fix/*` or `patch/*`
+### Commit Messages (Fallback)
+- `breaking change:` or `major:` → Major version
+- `feat:` or `minor:` → Minor version
+- `fix:` or `patch:` → Patch version
+- Default → Patch version
 
-### Pre-release Versions
-Create pre-releases with these prefixes:
-- `alpha:` → `v1.2.3-alpha.1`
-- `beta:` → `v1.2.3-beta.1`
-- `rc:` → `v1.2.3-rc.1`
-- `preview:` → `v1.2.3-preview.1`
+## Usage
 
-## Examples
+### Basic Usage
 
-### Tag-Only Creation
 ```yaml
-- name: Create Version Tag
-  uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@main
-  with:
-    create_release: false # Only creates semantic version tag
-    default_bump_level: 'minor'
-```
-
-### Release Without AI Notes
-```yaml
-- name: Create Basic Release
-  uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@main
-  with:
-    create_release_notes: false # Creates release without AI-generated notes
-    default_bump_level: 'patch'
-```
-
-### Basic Usage with Azure RBAC
-```yaml
-- name: Create Release
-  uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@main
-  with:
-    azure_openai_endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-    azure_openai_deployment_name: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
-    azure_client_id: ${{ secrets.AZURE_CLIENT_ID }}
-    azure_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
-    azure_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-```
-
-### First Release with Major Version
-```yaml
-name: Initial Release
+name: Release
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    if: github.event_name == 'push' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Create Release
+        uses: HafslundEcoVannkraft/stratus-gh-actions/release@main
+```
+
+### With Options
+
+```yaml
+- name: Create Release
+  uses: HafslundEcoVannkraft/stratus-gh-actions/release@main
+  with:
+    draft: false      # Create as published release (default: false)
+    prerelease: true  # Mark as pre-release
+```
+
+## Inputs
+
+| Input | Description | Required | Default |
+|-------|-------------|----------|---------|
+| `draft` | Create release as draft | No | `false` |
+| `prerelease` | Mark as pre-release | No | `false` |
+
+## Outputs
+
+| Output | Description | Example |
+|--------|-------------|---------|
+| `new_version` | Generated semantic version | `v1.2.3` |
+| `previous_version` | Previous version | `v1.2.2` |
+| `bump_type` | Version increment type | `major`, `minor`, or `patch` |
+| `release_url` | URL of created release | `https://github.com/owner/repo/releases/tag/v1.2.3` |
+
+## Examples
+
+### Release on Merge to Main
+
+```yaml
+name: Release on Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Create Release
+        uses: HafslundEcoVannkraft/stratus-gh-actions/release@main
+```
+
+### Release on Direct Push
+
+```yaml
+name: Release on Push
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
 
 jobs:
   release:
@@ -114,108 +134,74 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Important: Full history needed for first release
+          fetch-depth: 0
           
-      - name: Create Initial Release
-        uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@main
-        with:
-          azure_openai_endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-          azure_openai_deployment_name: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
-          azure_client_id: ${{ secrets.AZURE_CLIENT_ID }}
-          azure_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
-          azure_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          default_bump_level: 'major'  # Creates v1.0.0 as first version
+      - name: Create Release
+        uses: HafslundEcoVannkraft/stratus-gh-actions/release@main
 ```
 
-### Using API Key Authentication
+### Draft Release for Review
+
 ```yaml
-- name: Create Release
-  uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@main
+- name: Create Draft Release
+  uses: HafslundEcoVannkraft/stratus-gh-actions/release@main
   with:
-    azure_openai_endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-    azure_openai_deployment_name: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
-    azure_openai_api_key: ${{ secrets.AZURE_OPENAI_API_KEY }}
+    draft: true
 ```
 
-### Creating a Preview Release
+## Release Notes
+
+This action uses GitHub's native release notes generation, which:
+- Automatically categorizes PRs based on labels
+- Lists contributors
+- Provides a full changelog
+- Can be configured via `.github/release.yml`
+
+To customize release notes categories, create `.github/release.yml`:
+
 ```yaml
-# Commit message should include "preview:" prefix
-# e.g., "preview: new feature implementation"
-- name: Create Preview Release
-  uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@main
-  with:
-    azure_openai_endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-    azure_openai_deployment_name: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
-    azure_client_id: ${{ secrets.AZURE_CLIENT_ID }}
-    azure_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
-    azure_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-    prerelease: true
+changelog:
+  categories:
+    - title: 🚀 Features
+      labels:
+        - enhancement
+        - feature
+    - title: 🐛 Bug Fixes
+      labels:
+        - bug
+        - bugfix
 ```
 
-### Custom Configuration
-```yaml
-- name: Create Release
-  uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/release@main
-  with:
-    azure_openai_endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-    azure_openai_deployment_name: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
-    azure_client_id: ${{ secrets.AZURE_CLIENT_ID }}
-    azure_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
-    azure_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-    draft: false
-    prerelease: false
-    temperature: 0.5
-    max_tokens: 2000
-    default_bump_level: 'minor'
-    release_prefix: 'Release'
-    closing_note: |
-      ## Thank You
-      Special thanks to our amazing contributors: $contributors
-      
-      For more information, please visit our [documentation](https://docs.example.com).
-```
+## Migration from v1
 
-## Troubleshooting
+The v2 release removes all AI-powered features and external dependencies:
 
-### Common Issues
+**Removed:**
+- Azure OpenAI integration
+- AI-generated release notes
+- Complex configuration options
+- External API dependencies
 
-#### Missing or Invalid Azure OpenAI Configuration
-```
-Error: azure_openai_endpoint is required
-```
-- Verify Azure OpenAI environment variables are set
-- Check endpoint URL format (must start with https://)
-- Validate API version compatibility
+**What stays the same:**
+- Version bumping logic
+- Tag creation
+- Basic release creation
 
-#### Version History Issues
-```
-Error: Failed to get latest tag
-```
-- Ensure `fetch-depth: 0` in checkout action
-- Verify git tags exist and are accessible
-- Check repository permissions
+**What's new:**
+- Uses GitHub's native release notes
+- Zero configuration required
+- More reliable and faster
+- No API costs
 
-#### Authentication Failures
-```
-Error: Failed to get Azure token
-```
-- Verify Azure RBAC role assignments
-- Check client ID, tenant ID, and subscription ID and service principals oidc configuration
-- Confirm API key if using key authentication
+## Why Use This Action?
 
-#### Release Creation Failed
-```
-Error: Failed to create release
-```
-- Check GitHub token permissions
-- Verify tag doesn't already exist
-- Ensure release notes were generated successfully
+- **Simple**: No complex configuration or external dependencies
+- **Reliable**: Uses only GitHub's native features
+- **Fast**: No external API calls
+- **Free**: No costs for AI or external services
+- **Maintainable**: Minimal code, easy to understand
 
 ## License
 
 MIT
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
 

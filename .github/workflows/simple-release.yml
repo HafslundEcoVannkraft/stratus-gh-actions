@@ -1,0 +1,28 @@
+name: Simple Release
+
+# This workflow uses the simplified release action from this repository
+# The action handles version bumping based on PR labels and creates releases with GitHub's native notes
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create Release
+        uses: ./release  # Uses the release action from this repository
+        with:
+          draft: false
+          prerelease: false

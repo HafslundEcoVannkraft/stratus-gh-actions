@@ -1,0 +1,98 @@
+name: Build and Deploy Apps
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  analyze:
+    name: Analyze Changes
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.scope.outputs.matrix }}
+      has-changes: ${{ steps.scope.outputs.has-changes }}
+      deleted-folders: ${{ steps.scope.outputs.deleted-folders }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Analyze changes
+        id: scope
+        uses: HafslundEcoVannkraft/stratus-gh-actions/build-scope-analyzer@main
+        with:
+          root-path: ${{ github.workspace }}
+          # Optional: include-pattern: 'apps/*'
+          # Optional: exclude-pattern: 'tests/*'
+
+  build-apps:
+    name: Build ${{ matrix.app_name }}
+    needs: analyze
+    if: needs.analyze.outputs.has-changes == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.analyze.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ghcr.io/${{ github.repository }}/${{ matrix.app_name }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.path }}
+          file: ${{ matrix.dockerfile }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-apps:
+    name: Deploy Apps
+    needs: [analyze, build-apps]
+    if: github.ref == 'refs/heads/main' && needs.analyze.outputs.has-changes == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          echo "Deploying apps from matrix:"
+          echo '${{ needs.analyze.outputs.matrix }}' | jq .
+
+  cleanup-deleted:
+    name: Cleanup Deleted Apps
+    needs: analyze
+    if: needs.analyze.outputs.deleted-folders != '[]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Process deleted apps
+        run: |
+          echo "Deleted folders:"
+          echo '${{ needs.analyze.outputs.deleted-folders }}' | jq .
+          # Add cleanup logic here 

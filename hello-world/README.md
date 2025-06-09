@@ -27,20 +27,20 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Say Hello
-        uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/hello-world@main
+        uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@main
 ```
 
 ## Location in Monorepo
 
 ```
 repository-root/
-├── .github/
-│   ├── actions/
-│   │   ├── hello-world/      # This action
-│   │   │   ├── README.md
-│   │   │   ├── action.yml
-│   │   │   └── entrypoint.sh
-│   │   └── other-actions/    # Other composite actions
+├── hello-world/              # This action
+│   ├── README.md
+│   ├── action.yml
+│   └── entrypoint.sh
+├── release/                  # Release action
+├── build-scope-analyzer/     # Build scope analyzer action
+└── other-actions/            # Other composite actions
 ```
 
 ## File Permissions
@@ -48,7 +48,7 @@ repository-root/
 Make sure the entrypoint script has executable permissions:
 
 ```bash
-git update-index --chmod=+x .github/actions/hello-world/entrypoint.sh
+git update-index --chmod=+x hello-world/entrypoint.sh
 ```
 
 ## Inputs
@@ -65,7 +65,7 @@ This action doesn't produce any outputs. It simply prints "Hello world from stra
 
 ```yaml
 - name: Say Hello
-  uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/hello-world@main
+  uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@main
 ```
 
 ### Using with Other Actions from the Same Monorepo
@@ -78,13 +78,13 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: First Greeting
-        uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/hello-world@main
+        uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@main
         
       - name: Custom Message
         run: echo "This is a custom message"
         
       - name: Another Action
-        uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/another-action@main
+        uses: HafslundEcoVannkraft/stratus-gh-actions/release@main
 ```
 
 ### Using Specific Version
@@ -93,13 +93,13 @@ While you can use specific tags or commit SHAs, in a monorepo it's common to ref
 
 ```yaml
 # Using main branch
-- uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/hello-world@main
+- uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@main
 
 # Using a specific release
-- uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/hello-world@v1.0.0
+- uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@v1.0.0
 
 # Using a specific commit
-- uses: HafslundEcoVannkraft/stratus-gh-actions/.github/actions/hello-world@commit-sha
+- uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@commit-sha
 ```
 
 ## Contributing

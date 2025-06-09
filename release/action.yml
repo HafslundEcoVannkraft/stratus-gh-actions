@@ -1,583 +1,137 @@
-name: "Version Bump and Release"
-description: "Bumps version, creates tag, and generates GitHub release with AI-powered release notes using Azure OpenAI"
+name: "Simple Version Bump and Release"
+description: "Bumps version based on PR labels, creates tags, and generates GitHub releases with native release notes"
 
 inputs:
   # Release Configuration
   draft:
     description: "Create release as draft"
     required: false
-    default: "true"
+    default: "false"
   prerelease:
     description: "Mark as pre-release"
     required: false
-    default: "true"
-  release_prefix:
-    description: "Prefix for release titles"
-    required: false
-    default: ""
-  create_release:
-    description: "Create GitHub release (set false to only create semantic tags)"
-    default: "true"
-    required: false
-  create_release_notes:
-    description: "Generate AI release notes (set false to create release without notes)"
-    default: "true"
-    required: false
-  validate_version_history:
-    description: "Enable version history validation"
-    required: false
-    default: "true"
-  closing_note:
-    description: "Standardized closing note template for release notes"
-    required: false
-    default: "\n\n## Closing Note\nA heartfelt thank you to all contributors: $contributors.\n"
-
-  # Version Control
-  default_bump_level:
-    description: "Default version bump level ('major', 'minor', 'patch', or '') if no keyword found in commits or branch name"
-    required: false
-
-  # Azure OpenAI Configuration
-  azure_openai_endpoint:
-    description: "Azure OpenAI endpoint URL (https://your-resource.openai.azure.com/)"
-    required: false
-  azure_openai_deployment_name:
-    description: "Azure OpenAI model deployment name"
-    required: false
-  azure_openai_api_version:
-    description: "Azure OpenAI API version"
-    required: false
-  azure_openai_api_key:
-    description: "Azure OpenAI key (optional with Azure RBAC/OIDC)"
-    required: false
-
-  # Azure RBAC Configuration
-  azure_client_id:
-    description: "Azure Client ID for OIDC"
-    required: false
-  azure_tenant_id:
-    description: "Azure Tenant ID for OIDC"
-    required: false
-  azure_subscription_id:
-    description: "Azure Subscription ID for OIDC"
-    required: false
-
-  # AI Generation Parameters
-  temperature:
-    description: "AI temperature (0.0-2.0), higher is more creative"
-    required: false
-    default: "0.2"
-  max_tokens:
-    description: "Maximum tokens in response"
-    required: false
-    default: "4000"
-  top_p:
-    description: "Nucleus sampling threshold (0.1-1.0), lower is more focused"
-    required: false
-    default: "1.0"
-  frequency_penalty:
-    description: "Token frequency penalty (-2.0 to 2.0), positive reduces repetition"
-    required: false
-    default: "0.1"
-  presence_penalty:
-    description: "Topic presence penalty (-2.0 to 2.0), positive encourages new topics"
-    required: false
-    default: "0.1"
-  response_format:
-    description: "Response format (text/json_object)"
-    required: false
-    default: "text"
-  seed:
-    description: "Random seed for reproducible outputs"
-    required: false
-    default: ""
-  append_context:
-    description: "Additional context for release notes generation"
-    required: false
-    default: ""
+    default: "false"
   
 outputs:
   new_version:
     description: "Generated semantic version number (e.g., v1.2.3)"
-    value: ${{ steps.version_info.outputs.new_version }}
+    value: ${{ steps.version.outputs.new_version }}
   previous_version:
-    description: "Base version for comparison (e.g., v1.2.2)"
-    value: ${{ steps.version_info.outputs.previous_version }}
-  bump_level:
-    description: "Version increment type: major (x.0.0), minor (0.x.0), patch (0.0.x), or initial"
-    value: ${{ steps.version_info.outputs.bump_level }}
-  release_notes_base64:
-    description: "Base64-encoded AI-generated release notes"
-    value: ${{ steps.create_release.outputs.release_notes_base64 }}
+    description: "Previous version for comparison (e.g., v1.2.2)"
+    value: ${{ steps.version.outputs.previous_version }}
+  bump_type:
+    description: "Version increment type: major, minor, or patch"
+    value: ${{ steps.version.outputs.bump_type }}
+  release_url:
+    description: "URL of the created release"
+    value: ${{ steps.release.outputs.release_url }}
 
 runs:  
   using: "composite"  
-  steps:  
-    - name: Validate Inputs
-      id: validate_inputs
-      shell: bash  
-      run: |
-        # Set defaults and validate create_release flags
-        create_release="${{ inputs.create_release }}"
-        create_release_notes="${{ inputs.create_release_notes }}"
-        
-        # Validate default_bump_level
-        valid_bump_levels=("major" "minor" "patch" "")  
-        if [[ ! " ${valid_bump_levels[@]} " =~ " ${{ inputs.default_bump_level }} " ]]; then  
-          echo "Error: Invalid default_bump_level value. Must be one of: 'major', 'minor', 'patch', or empty."  
-          exit 1  
-        fi
-
-        # If create_release is false, force create_release_notes to false
-        if [[ "$create_release" != "true" ]]; then
-          create_release_notes="false"
-        fi
-
-        # Validate Azure OpenAI inputs if release notes are enabled
-        if [[ "$create_release_notes" == "true" ]]; then
-          if [ -z "${{ inputs.azure_openai_endpoint }}" ]; then  
-            echo "Error: azure_openai_endpoint is required when create_release_notes is true"  
-            exit 1  
-          fi  
-          if [[ "${{ inputs.azure_openai_endpoint }}" != "https://"* ]]; then  
-            echo "Error: azure_openai_endpoint must start with https://"  
-            exit 1  
-          fi
-          if [ -z "${{ inputs.azure_openai_deployment_name }}" ]; then
-            echo "Error: azure_openai_deployment_name is required when create_release_notes is true"
-            exit 1
-          fi
-          if [ -z "${{ inputs.azure_openai_api_version }}" ]; then
-            echo "Error: azure_openai_api_version is required when create_release_notes is true"
-            exit 1
-          fi
-        fi
-
-        echo "create_release_notes=$create_release_notes" >> "$GITHUB_OUTPUT"
-        echo "create_release=$create_release" >> "$GITHUB_OUTPUT"
-  
-    - name: Determine Version and Comparison Base  
-      id: version_info  
+  steps:
+    - name: Determine Version
+      id: version
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
-      run: |  
-        set -e  
-  
-        # Function to get the latest tag in the current HEAD history  
-        get_latest_branch_tag() {
-          # Fetch all tags
-          git fetch --tags > /dev/null 2>&1
-
-          # Traverse the history of HEAD to find the latest tag
-          latest_tag=$(git for-each-ref --sort=-creatordate --format '%(refname:short)' refs/tags | grep "^v[0-9]" | head -n 1)
-
-          # Fallback to v0.0.0 if no tag is found
-          echo "${latest_tag:-v0.0.0}"
-        }
-
-        # Get the latest tag in the current branch  
-        base_tag=$(get_latest_branch_tag)
-        echo "Current base tag in HEAD history: $base_tag"  
-  
-        # Parse version components  
-        if [[ $base_tag == "v0.0.0" ]]; then
-          major=0
-          minor=0
-          patch=0
-        else
-          major=$(echo $base_tag | sed 's/v//' | cut -d. -f1)
-          minor=$(echo $base_tag | cut -d. -f2)
-          patch=$(echo $base_tag | cut -d. -f3 | cut -d- -f1)
-        fi
-  
-        # Check the event type
-        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          # For pull request event
-          echo "Workflow triggered by a Pull Request. Fetching commits from the PR."
-
-          # Fetch the list of commits in the pull request
-          pull_request_commits=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/commits | jq -r '.[].commit.message')
-
-          # Extract the last commit message
-          commit_message=$(echo "$pull_request_commits" | tr '[:upper:]' '[:lower:]')
-
-          echo "Commit message from Pull Request: $commit_message"
-
-          # Get branch name
-          branch_name="${{ github.event.pull_request.head.ref }}"
-        else
-          # For push event
-          echo "Workflow triggered by a direct push. Fetching the latest commit message from the branch."
-
-          # Ensure the branch history is fully fetched
-          git fetch origin
-
-          # Get the last commit message on the head of the branch
-          commit_message=$(git log -1 --pretty=%B | tr '[:upper:]' '[:lower:]')
-
-          echo "Commit message from Push: $commit_message"
-        fi
-
-        # Debugging: Print the fetched commit message
-        echo "Fetched commit message: '$commit_message'"
-
-        # Initialize bump_level and pre_release_type
-        bump_level=""  
-        pre_release_type=""  
-
-        # Debugging: Check keyword matching
-        echo "Checking commit message for keywords..."
-
-        # Determine bump type priority: major > minor > patch from commit message
-        if [[ "$commit_message" == *"breaking change:"* ]] || [[ "$commit_message" == *"major:"* ]]; then  
-          bump_level="major"  
-          echo "Detected bump level: major"
-        elif [[ "$commit_message" == *"feat:"* ]] || [[ "$commit_message" == *"minor:"* ]]; then  
-          bump_level="minor"  
-          echo "Detected bump level: minor"
-        elif [[ "$commit_message" == *"fix:"* ]] || [[ "$commit_message" == *"patch:"* ]]; then  
-          bump_level="patch"  
-          echo "Detected bump level: patch"
-        else
-          echo "No matching keywords found in the commit message."
-        fi
-
-        # If no bump_level from commits, check branch name
-        if [[ -z "$bump_level" ]]; then
-          if [[ "$branch_name" == major/* ]]; then
-            bump_level="major"
-          elif [[ "$branch_name" == feat/* ]] || [[ "$branch_name" == minor/* ]]; then
-            bump_level="minor"
-          elif [[ "$branch_name" == fix/* ]] || [[ "$branch_name" == patch/* ]]; then
-            bump_level="patch"
-          fi
-        fi
-
-        create_tag="true"
-        create_release="${{ inputs.create_release }}"
-        create_release_notes="${{ steps.validate_inputs.outputs.create_release_notes }}"
-
-        # If no bump_level is found, use default or skip create_release
-        if [[ -z "$bump_level" && -n "${{ inputs.default_bump_level }}" ]]; then
-          bump_level="${{ inputs.default_bump_level }}"
-        elif [[ -z "$bump_level" && -z "${{ inputs.default_bump_level }}" ]]; then
-          echo "No bump level determined from commit message and no default_bump_level provided. The next steps will be skipped as no Release Notes should be generated."
-          create_tag="false"
-          create_release="false"
-          create_release_notes="false"
-        fi
-
-        echo "create_tag=$create_tag" >> "$GITHUB_OUTPUT"
-        echo "create_release=$create_release" >> "$GITHUB_OUTPUT"
-        echo "create_release_notes=$create_release_notes" >> "$GITHUB_OUTPUT"
-
-        if [[ "$create_tag" == "true" ]]; then
-          # Pre-release type detection
-          echo "Checking commit message for pre-release keywords..."
-          if [[ "$commit_message" == *"alpha:"* ]]; then  
-            pre_release_type="alpha"  
-            echo "Detected pre-release type: alpha"
-          elif [[ "$commit_message" == *"beta:"* ]]; then  
-            pre_release_type="beta"  
-            echo "Detected pre-release type: beta"
-          elif [[ "$commit_message" == *"rc:"* ]]; then  
-            pre_release_type="rc"  
-            echo "Detected pre-release type: rc"
-          elif [[ "$commit_message" == *"preview:"* ]]; then  
-            pre_release_type="preview"  
-            echo "Detected pre-release type: preview"
-          fi
-
-          # Debugging: Display final values
-          echo "Final bump level: $bump_level"
-          echo "Final pre-release type: $pre_release_type"
-
-          # Calculate new version
-          new_major=$major  
-          new_minor=$minor  
-          new_patch=$patch  
-
-          # Apply version bump
-          if [[ "$bump_level" == "major" ]]; then  
-            new_major=$((major + 1))  
-            new_minor=0  
-            new_patch=0  
-          elif [[ "$bump_level" == "minor" ]]; then  
-            new_minor=$((minor + 1))  
-            new_patch=0  
-          elif [[ "$bump_level" == "patch" ]]; then  
-            new_patch=$((patch + 1))  
-          fi
-
-          # Handle pre-release versioning
-          if [[ -n "$pre_release_type" ]]; then  
-            current_pre_release=$(git tag --sort=-v:refname | grep "^v${new_major}.${new_minor}.${new_patch}-${pre_release_type}" | head -n 1 || echo "")  
-            if [[ -z "$current_pre_release" ]]; then  
-              new_version="v${new_major}.${new_minor}.${new_patch}-${pre_release_type}.1"  
-            else  
-              current_number=$(echo $current_pre_release | awk -F- '{print $2}' | cut -d'.' -f2)  
-              new_version="v${new_major}.${new_minor}.${new_patch}-${pre_release_type}.$((current_number + 1))"  
-            fi  
-          else  
-            # Regular versioning without pre-release  
-            new_version="v${new_major}.${new_minor}.${new_patch}"  
-          fi  
-        fi
-
-        # Output values for other steps  
-        echo "new_version=$new_version" >> "$GITHUB_OUTPUT"
-        echo "previous_version=$base_tag" >> "$GITHUB_OUTPUT"
-        echo "bump_level=$bump_level" >> "$GITHUB_OUTPUT"
-        echo "pre_release_type=$pre_release_type" >> "$GITHUB_OUTPUT"
-
-    - name: Set up Git
-      if: ${{ steps.version_info.outputs.create_tag == 'true' }}
-      shell: bash
-      env:
-        GIT_USER_NAME: "github-actions[bot]"
-        GIT_USER_EMAIL: "github-actions[bot]@users.noreply.github.com"
-      run: |
-        git config --global user.name "$GIT_USER_NAME"
-        git config --global user.email "$GIT_USER_EMAIL"
-
-    - name: Tag new version
-      if: ${{ steps.version_info.outputs.create_tag == 'true' }}
-      shell: bash
       run: |
         set -e
-        git tag -a "${{ steps.version_info.outputs.new_version }}" -m "Release ${{ steps.version_info.outputs.new_version }}"
-        git push origin "${{ steps.version_info.outputs.new_version }}"
-
-    - name: Azure login
-      if: ${{ steps.version_info.outputs.create_release_notes == 'true' }}
-      uses: azure/login@v2
-      with:
-        client-id: ${{ inputs.azure_client_id }}
-        tenant-id: ${{ inputs.azure_tenant_id }}
-        subscription-id: ${{ inputs.azure_subscription_id }}
-
-    - name: Configure Azure OpenAI
-      if: ${{ steps.version_info.outputs.create_release_notes == 'true' }}
-      id: azure_openai_config
-      shell: bash
-      env:
-        AZURE_OPENAI_ENDPOINT: ${{ inputs.azure_openai_endpoint }}
-        AZURE_OPENAI_API_KEY: ${{ inputs.azure_openai_api_key }}
-        AZURE_OPENAI_DEPLOYMENT_NAME: ${{ inputs.azure_openai_deployment_name }}
-        AZURE_OPENAI_API_VERSION: ${{ inputs.AZURE_OPENAI_API_VERSION }}
-      run: |
-        echo "Debug: Checking Azure OpenAI configuration"
-        echo "Endpoint: ${AZURE_OPENAI_ENDPOINT}"
-        echo "Deployment: ${AZURE_OPENAI_DEPLOYMENT_NAME}"
-        echo "API Version: ${AZURE_OPENAI_API_VERSION}"
-
-        # Authentication
-        if [ -n "$AZURE_OPENAI_API_KEY" ] && [ "$AZURE_OPENAI_API_KEY" != "" ]; then
-          echo "Debug: Using API key authentication"
-          auth_header="api-key: $AZURE_OPENAI_API_KEY"
+        
+        # Get the latest tag
+        latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        echo "Latest tag: $latest_tag"
+        
+        # Extract version numbers
+        major=$(echo $latest_tag | sed 's/v//' | cut -d. -f1)
+        minor=$(echo $latest_tag | cut -d. -f2)
+        patch=$(echo $latest_tag | cut -d. -f3 | cut -d- -f1)
+        
+        # Get PR labels for pull request events
+        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          pr_labels="${{ join(github.event.pull_request.labels.*.name, ',') }}"
+          echo "PR labels: $pr_labels"
         else
-          echo "Debug: Using managed identity authentication"
-          token=$(az account get-access-token --resource https://cognitiveservices.azure.com/ --query accessToken -o tsv)
-          if [ $? -ne 0 ]; then
-            echo "Error: Failed to get Azure token"
-            exit 1
+          # For push events, check the commit message
+          commit_message=$(git log -1 --pretty=%B | tr '[:upper:]' '[:lower:]')
+          echo "Last commit message: $commit_message"
+          pr_labels=""
+        fi
+        
+        # Determine version bump based on labels or commit message
+        bump_type=""
+        
+        # Check PR labels first (for PR events)
+        if [[ -n "$pr_labels" ]]; then
+          if [[ "$pr_labels" == *"breaking-change"* ]] || [[ "$pr_labels" == *"major"* ]]; then
+            bump_type="major"
+          elif [[ "$pr_labels" == *"enhancement"* ]] || [[ "$pr_labels" == *"feature"* ]] || [[ "$pr_labels" == *"minor"* ]]; then
+            bump_type="minor"
+          else
+            bump_type="patch"
           fi
-          auth_header="Authorization: Bearer $token"
-        fi
-
-        # Export auth header for next steps
-        echo "auth_header=$auth_header" >> $GITHUB_OUTPUT
-        echo "Debug: Azure OpenAI configuration complete"
-
-    - name: Extract Contributors
-      if: ${{ steps.version_info.outputs.create_release_notes == 'true' }}
-      id: contributors
-      shell: bash
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        # Extract contributors' GitHub IDs
-        contributors=$(gh api repos/${{ github.repository }}/commits --paginate \
-          | jq -r '.[].author | select(. != null) | "@\(.login)"' \
-          | sort | uniq \
-          | jq -Rs 'split("\n") | map(select(. != "")) | join(", ")')
-        echo "Contributors identified: $contributors"
-        echo "contributors=$contributors" >> $GITHUB_OUTPUT
-
-
-    - name: Generate Release Notes
-      if: ${{ steps.version_info.outputs.create_release_notes == 'true' }}
-      id: release
-      shell: bash
-      env:
-        AZURE_OPENAI_ENDPOINT: ${{ inputs.azure_openai_endpoint }}
-        AZURE_OPENAI_DEPLOYMENT_NAME: ${{ inputs.azure_openai_deployment_name }}
-        AZURE_OPENAI_API_VERSION: ${{ inputs.AZURE_OPENAI_API_VERSION }}
-        TEMPERATURE: ${{ inputs.temperature }}
-        MAX_TOKENS: ${{ inputs.max_tokens }}
-        TOP_P: ${{ inputs.top_p }}
-        FREQUENCY_PENALTY: ${{ inputs.frequency_penalty }}
-        PRESENCE_PENALTY: ${{ inputs.presence_penalty }}
-        RESPONSE_FORMAT: ${{ inputs.response_format }}
-        SEED: ${{ inputs.seed }}
-        AUTH_HEADER: ${{ steps.azure_openai_config.outputs.auth_header }}
-      run: |
-        latest_version="${{ steps.version_info.outputs.new_version }}"
-        previous_version="${{ steps.version_info.outputs.previous_version }}"
-        bump_level="${{ steps.version_info.outputs.bump_level }}"
-        contributors="${{ steps.contributors.outputs.contributors }}"
-        append_context="${{ inputs.append_context }}"
-
-        echo "Debug: Git Information"
-        echo "Latest version: $latest_version"
-        echo "Previous version: $previous_version"
-        echo "Bump level: $bump_level"
-        
-        # Get the first commit hash
-        first_commit=$(git rev-list --max-parents=0 HEAD)
-        echo "First commit: $first_commit"
-        
-        # Handle first release differently
-        if [[ "$previous_version" == "v0.0.0" ]]; then
-          echo "Initial release - getting all changes since first commit"
-          # Get changes from first commit to current HEAD
-          git_diff=$(git diff $first_commit..HEAD | base64)
-          # Get all commit messages from first commit
-          commit_messages=$(git log --format="%h %s" $first_commit..HEAD | base64)
-          # Get all PR titles from first commit
-          pr_titles=$(git log --pretty=format:"%s" $first_commit..HEAD --grep "Merge pull request" | base64)
         else
-          # For subsequent releases, compare with previous tag
-          echo "Regular release - comparing with previous tag"
-          git_diff=$(git diff $previous_version..HEAD | base64)
-          commit_messages=$(git log $previous_version..HEAD --format="%h %s" | base64)
-          pr_titles=$(git log $previous_version..HEAD --pretty=format:"%s" --grep "Merge pull request" | base64)
+          # Fall back to commit message parsing (for push events)
+          if [[ "$commit_message" == *"breaking change:"* ]] || [[ "$commit_message" == *"major:"* ]]; then
+            bump_type="major"
+          elif [[ "$commit_message" == *"feat:"* ]] || [[ "$commit_message" == *"minor:"* ]]; then
+            bump_type="minor"
+          elif [[ "$commit_message" == *"fix:"* ]] || [[ "$commit_message" == *"patch:"* ]]; then
+            bump_type="patch"
+          else
+            bump_type="patch"  # Default to patch
+          fi
         fi
-
-        echo -e "\nDebug: Prepared Data"
-        echo "git_diff (Base64): ${git_diff:0:100}..." # Show first 100 chars for debugging
-        echo "commit_messages (Base64): ${commit_messages:0:100}..." # Show first 100 chars for debugging
-        echo "pr_titles (Base64): ${pr_titles:0:100}..." # Show first 100 chars for debugging
-
-        # Prepare the request body dynamically based on inputs
-        request_body=$(jq -n \
-          --arg latest "$latest_version" \
-          --arg previous "$previous_version" \
-          --arg diff "$git_diff" \
-          --arg commits "$commit_messages" \
-          --arg prs "$pr_titles" \
-          --arg temp "$TEMPERATURE" \
-          --arg max "$MAX_TOKENS" \
-          --arg top "$TOP_P" \
-          --arg freq "$FREQUENCY_PENALTY" \
-          --arg pres "$PRESENCE_PENALTY" \
-          --arg append "$APPEND_CONTEXT" \
-          '{
-            messages: [
-              {
-                role: "system",
-                content: "You are a professional technical writer and code expert specializing in generating concise and consistent release notes for software releases based on inputs from Base64-encoded git diff, commit messages, pull-request messages, and titles. Decode the Base64 strings before analyzing it."
-              },
-              {
-                role: "user",
-                content: "Generate a software release note based on a deep code and feature analyze of this full content. By default Include:\n1. A title: # Relase Note, do not include version information as this will be added automaticly within GitHub.\n2. A top section ##Summary.\n3. Sections for ### New Features, ### Bug Fixes and ### Improvements if relevant, this default structure can be overriden by the Additional context below.\n- Additional context: \($append)\n- Git diff base64: \($diff)\n- Commit messages base64: \($commits)\n- PR titles base64: \($prs)"
-              }
-            ],
-            temperature: ($temp|tonumber),
-            max_tokens: ($max|tonumber),
-            top_p: ($top|tonumber),
-            frequency_penalty: ($freq|tonumber),
-            presence_penalty: ($pres|tonumber)
-          }')
-
-        echo "Debug: Request body prepared"
-        echo "$request_body" | jq '.'
-
-        # Add response format if specified and not default
-        if [ -n "$RESPONSE_FORMAT" ] && [ "$RESPONSE_FORMAT" != "text" ]; then
-          request_body=$(echo "$request_body" | jq --arg fmt "$RESPONSE_FORMAT" '. + {response_format: {type: $fmt}}')
-        fi
-
-        # Add seed if specified
-        if [ -n "$SEED" ]; then
-          request_body=$(echo "$request_body" | jq --arg seed "$SEED" '. + {seed: ($seed|tonumber)}')
-        fi
-
-        echo "Debug: Request body prepared after extra properties"
-        echo "$request_body" | jq '.'
-
-        response=$(curl -s -X POST "$AZURE_OPENAI_ENDPOINT/openai/deployments/$AZURE_OPENAI_DEPLOYMENT_NAME/chat/completions?api-version=$AZURE_OPENAI_API_VERSION" \
-          -H "Content-Type: application/json" \
-          -H "$AUTH_HEADER" \
-          -d "$request_body")
-
-        echo "Debug: Full API Response:"
-        echo "$response" | jq '.'
-
-        if ! echo "$response" | jq -r '.choices[0].message.content' > release_notes.md; then
-          echo "Error: Failed to extract content from response"
-          echo "Response structure:"
-          echo "$response" | jq '.'
-          exit 1
-        fi
-
-        echo "Debug: Generated Release Notes:"
-        cat release_notes.md
-
-    - name: Append Contributors to Release Notes
-      if: ${{ steps.version_info.outputs.create_release_notes == 'true' }}
-      id: append_contributors
-      shell: bash
-      run: |
-        # Retrieve contributors from previous step
-        contributors="${{ steps.contributors.outputs.contributors }}"
-
-        # Append the closing note to release notes
-        echo -e "${{ inputs.closing_note }}" >> release_notes.md
-
-        # Debug: Display updated release notes
-        echo "Debug: Updated Release Notes:"
-        cat release_notes.md
-
-    - name: Create GitHub Release
-      id: create_release
-      if: ${{ steps.version_info.outputs.create_release == 'true' }}
-      shell: bash
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
-        RELEASE_PREFIX: ${{ inputs.release_prefix }}
-      run: |
-        echo "Debug: Creating GitHub release"
-        if [ ! -f release_notes.md ]; then
-          echo "Error: release_notes.md file not found"
-          exit 1
-        fi
-
-        release_body=$(cat release_notes.md | jq -Rsa .) || echo ""
-        echo "release_notes_base64=$(cat release_notes.md | base64 -w 0)" >> $GITHUB_OUTPUT
-
-        echo "Debug: Creating release with:"
-        echo "Tag: ${{ steps.version_info.outputs.new_version }}"
-        echo "Name: $RELEASE_PREFIX ${{ steps.version_info.outputs.new_version }}"
         
-        response=$(curl -v -X POST "https://api.github.com/repos/${{ github.repository }}/releases" \
-          -H "Authorization: token $GITHUB_TOKEN" \
-          -H "Content-Type: application/json" \
-          -H "Accept: application/vnd.github.v3+json" \
-          -d "{
-            \"tag_name\": \"${{ steps.version_info.outputs.new_version }}\",
-            \"name\": \"$RELEASE_PREFIX ${{ steps.version_info.outputs.new_version }}\",
-            \"body\": $release_body,
-            \"draft\": ${{ inputs.draft }},
-            \"prerelease\": ${{ inputs.prerelease }}
-          }")
-
-        if ! echo "$response" | jq -e .id > /dev/null 2>&1; then
-          echo "Error: Failed to create release"
-          echo "Response:"
-          echo "$response" | jq '.'
-          exit 1
+        # Calculate new version
+        if [[ "$bump_type" == "major" ]]; then
+          new_version="v$((major + 1)).0.0"
+        elif [[ "$bump_type" == "minor" ]]; then
+          new_version="v${major}.$((minor + 1)).0"
+        else
+          new_version="v${major}.${minor}.$((patch + 1))"
         fi
+        
+        echo "New version: $new_version (${bump_type} bump)"
+        
+        # Output values
+        echo "new_version=$new_version" >> "$GITHUB_OUTPUT"
+        echo "previous_version=$latest_tag" >> "$GITHUB_OUTPUT"
+        echo "bump_type=$bump_type" >> "$GITHUB_OUTPUT"
 
-        echo "Success: Release created successfully"
+    - name: Create Tag
+      shell: bash
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        
+        git tag -a "${{ steps.version.outputs.new_version }}" -m "Release ${{ steps.version.outputs.new_version }}"
+        git push origin "${{ steps.version.outputs.new_version }}"
+
+    - name: Create Release
+      id: release
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { data: release } = await github.rest.repos.createRelease({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            tag_name: '${{ steps.version.outputs.new_version }}',
+            name: '${{ steps.version.outputs.new_version }}',
+            draft: ${{ inputs.draft }},
+            prerelease: ${{ inputs.prerelease }},
+            target_commitish: context.sha,
+            generate_release_notes: true  // Use GitHub's native release notes
+          });
+          
+          console.log(`Created release: ${release.html_url}`);
+          core.setOutput('release_url', release.html_url);
+          
+          // Comment on PR if this is a PR event
+          if (context.eventName === 'pull_request' && context.payload.pull_request) {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: `🚀 Released version ${{ steps.version.outputs.new_version }}!\n\nView the release: ${release.html_url}`
+            });
+          }

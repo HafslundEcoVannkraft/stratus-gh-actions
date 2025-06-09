@@ -1,0 +1,58 @@
+name: 'Build Scope Analyzer'
+description: 'Analyze git changes to identify what needs to be built and generate strategy matrix'
+author: 'Stratus Team'
+
+inputs:
+  root-path:
+    description: 'Root path to search for changes (defaults to GITHUB_WORKSPACE)'
+    required: false
+    default: ${{ github.workspace }}
+  include-pattern:
+    description: 'Glob pattern for paths to include (e.g., "apps/*")'
+    required: false
+    default: ''
+  exclude-pattern:
+    description: 'Glob pattern for paths to exclude (e.g., "tests/*")'
+    required: false
+    default: ''
+  ref:
+    description: 'Git ref to compare against (defaults to automatic detection)'
+    required: false
+    default: ''
+
+outputs:
+  matrix:
+    description: 'JSON matrix for GitHub Actions strategy'
+    value: ${{ steps.analyze.outputs.matrix }}
+  deleted-folders:
+    description: 'JSON array of folders that were deleted (for cleanup)'
+    value: ${{ steps.analyze.outputs.deleted_folders }}
+  ref:
+    description: 'Git ref used for comparison'
+    value: ${{ steps.analyze.outputs.ref }}
+  has-changes:
+    description: 'Boolean indicating if any changes were detected'
+    value: ${{ steps.analyze.outputs.has_changes }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        pip install pyyaml
+
+    - name: Analyze changes
+      id: analyze
+      shell: bash
+      run: |
+        python ${{ github.action_path }}/build_scope_analyzer.py \
+          --root-path "${{ inputs.root-path }}" \
+          --include-pattern "${{ inputs.include-pattern }}" \
+          --exclude-pattern "${{ inputs.exclude-pattern }}" \
+          --ref "${{ inputs.ref }}"

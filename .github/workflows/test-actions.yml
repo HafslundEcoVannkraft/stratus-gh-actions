@@ -44,7 +44,7 @@ jobs:
           cp release/action.yml release/action.yml.bak
           
           # Modify the action to skip the actual git push
-          sed -i "s/git push origin/echo \"MOCK: Would push tag\"/g" release/action.yml
+          sed -i "" "s/git push origin/echo \"MOCK: Would push tag\"/g" release/action.yml || sed -i "s/git push origin/echo \"MOCK: Would push tag\"/g" release/action.yml
       
       - name: Create Test Release
         id: release

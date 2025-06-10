@@ -45,7 +45,7 @@ runs:
     - name: Install dependencies
       shell: bash
       run: |
-        pip install pyyaml
+        pip install pyyaml==6.0.1
 
     - name: Analyze changes
       id: analyze

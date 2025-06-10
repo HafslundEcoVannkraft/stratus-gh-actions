@@ -9,6 +9,10 @@ on:
       - 'build-scope-analyzer/**'
       - '.github/workflows/test-actions.yml'
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   test-hello-world:
     name: Test Hello World Action
@@ -16,10 +20,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Make entrypoint executable
+        run: chmod +x ./hello-world/entrypoint.sh
+      
       - name: Test Hello World Action
         uses: ./hello-world
-        with:
-          who-to-greet: 'GitHub Actions'
 
   test-release:
     name: Test Release Action
@@ -28,11 +33,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Configure Git
         run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+      
+      # Create a test scenario by modifying the release action to avoid actual push
+      - name: Mock Release Action for Testing
+        run: |
+          # Create a backup of the original action
+          cp release/action.yml release/action.yml.bak
+          
+          # Modify the action to skip the actual git push
+          sed -i 's/git push origin/echo "MOCK: Would push tag"/g' release/action.yml
       
       - name: Create Test Release
         id: release
@@ -43,12 +58,21 @@ jobs:
       
       - name: Verify Release
         run: |
-          echo "Created release: ${{ steps.release.outputs.release_id }}"
+          echo "Created release: ${{ steps.release.outputs.new_version }}"
+          echo "Previous version: ${{ steps.release.outputs.previous_version }}"
           echo "Release URL: ${{ steps.release.outputs.release_url }}"
+          echo "Bump type: ${{ steps.release.outputs.bump_type }}"
       
       - name: Delete Test Release
+        if: always()
         run: |
-          gh release delete ${{ steps.release.outputs.release_id }} --yes
+          # Delete the release if it was created
+          if [[ -n "${{ steps.release.outputs.new_version }}" ]]; then
+            gh release delete ${{ steps.release.outputs.new_version }} --yes || true
+          fi
+          
+          # Restore the original action
+          mv release/action.yml.bak release/action.yml || true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -57,9 +81,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
-      - name: Create Test Files
+      - name: Setup Test Environment
         run: |
+          # Create test files
           mkdir -p src/helloworld
           echo "FROM node:18" > src/helloworld/Dockerfile
           echo "WORKDIR /app" >> src/helloworld/Dockerfile
@@ -69,21 +96,46 @@ jobs:
           echo "name: hello-world" > src/helloworld/app.yaml
           echo "version: 1.0.0" >> src/helloworld/app.yaml
           echo "description: Test application" >> src/helloworld/app.yaml
-      
-      - name: Analyze Build Scope
+          
+          # Create a test branch to compare against
+          git checkout -b test-base
+          git add .
+          git commit -m "Initial test commit" || true
+          
+          # Make changes on a new branch
+          git checkout -b test-changes
+          echo "console.log('Hello World');" > src/helloworld/index.js
+          mkdir -p src/another-app
+          echo "FROM alpine:latest" > src/another-app/Dockerfile
+          git add .
+          
+      - name: Analyze Build Scope (with changes)
         id: scope
         uses: ./build-scope-analyzer
         with:
-          paths: |
-            src: 'src/**/*'
-            docker: '**/Dockerfile'
-            yaml: '**/*.yaml'
+          ref: test-base
       
-      - name: Verify Analysis
+      - name: Verify Analysis Results
         run: |
-          echo "Changes detected: ${{ steps.scope.outputs.changes_detected }}"
-          echo "Changed files: ${{ steps.scope.outputs.changed_files }}"
-          echo "Matched patterns: ${{ steps.scope.outputs.matched_patterns }}"
-          echo "src changes: ${{ steps.scope.outputs.src }}"
-          echo "docker changes: ${{ steps.scope.outputs.docker }}"
-          echo "yaml changes: ${{ steps.scope.outputs.yaml }}" 
+          echo "Has changes: ${{ steps.scope.outputs.has-changes }}"
+          echo "Matrix: ${{ steps.scope.outputs.matrix }}"
+          echo "Deleted folders: ${{ steps.scope.outputs.deleted-folders }}"
+          echo "Ref used: ${{ steps.scope.outputs.ref }}"
+          
+          # Parse and display matrix
+          if [[ "${{ steps.scope.outputs.has-changes }}" == "true" ]]; then
+            echo "Matrix content:"
+            echo '${{ steps.scope.outputs.matrix }}' | jq .
+          fi
+      
+      - name: Test with Include Pattern
+        id: scope-include
+        uses: ./build-scope-analyzer
+        with:
+          ref: test-base
+          include-pattern: 'src/helloworld/*'
+      
+      - name: Verify Include Pattern Results
+        run: |
+          echo "Has changes (include pattern): ${{ steps.scope-include.outputs.has-changes }}"
+          echo "Matrix (include pattern): ${{ steps.scope-include.outputs.matrix }}" 

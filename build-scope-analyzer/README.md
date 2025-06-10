@@ -1,22 +1,101 @@
 # Build Scope Analyzer
 
-A GitHub Action that analyzes git changes to identify what needs to be built, generating a strategy matrix for efficient CI/CD pipelines.
+A GitHub Action that analyzes git changes to identify what needs to be built and generates a strategy matrix for GitHub Actions workflows.
 
 ## Features
 
-- 🔍 **Smart Change Detection**: Analyzes git diff to identify changed folders
-- 📦 **App Detection**: Finds apps by looking for `app.yaml`/`app.yml` and `Dockerfile`
-- 🏷️ **Smart App Naming**: Extracts app names from configuration or uses folder names
-- 🎯 **Path Filtering**: Include or exclude paths using glob patterns
-- 📊 **Matrix Output**: Generates GitHub Actions strategy matrix for parallel builds
-- 🗑️ **Deletion Tracking**: Identifies deleted folders for cleanup operations
+- Detects changed folders based on git diff
+- Finds all Dockerfiles in changed folders
+- Optionally requires app.yaml/app.yml for Container Apps
+- Generates GitHub Actions matrix for parallel builds
+- Supports include/exclude patterns
 
 ## Usage
 
-### Basic Usage
+### For Generic Docker Builds
+
+Use this mode when you want to build any Dockerfile found in changed folders:
 
 ```yaml
-name: Build Changed Apps
+- name: Analyze changes
+  id: analyze
+  uses: HafslundEcoVannkraft/stratus-gh-actions/build-scope-analyzer@v3
+  with:
+    include-pattern: 'services/*'
+```
+
+This will find all folders under `services/` that have changes and contain Dockerfiles.
+
+### For Azure Container Apps
+
+Use this mode when building for Container Apps that require app.yaml configuration:
+
+```yaml
+- name: Analyze changes
+  id: analyze
+  uses: HafslundEcoVannkraft/stratus-gh-actions/build-scope-analyzer@v3
+  with:
+    include-pattern: 'apps/*'
+    require-app-config: true
+```
+
+With `require-app-config: true`, the analyzer will include folders that have:
+- Dockerfiles to build, OR
+- app.yaml/app.yml with pre-built images only
+
+## Inputs
+
+| Input | Description | Required | Default |
+|-------|-------------|----------|---------|
+| `root-path` | Root path to search for changes | No | `${{ github.workspace }}` |
+| `include-pattern` | Glob pattern for paths to include (e.g., `apps/*`) | No | `''` |
+| `exclude-pattern` | Glob pattern for paths to exclude (e.g., `tests/*`) | No | `''` |
+| `ref` | Git ref to compare against | No | Auto-detected |
+| `require-app-config` | Require app.yaml/app.yml files | No | `false` |
+
+## Outputs
+
+| Output | Description |
+|--------|-------------|
+| `matrix` | JSON matrix for GitHub Actions strategy |
+| `deleted-folders` | JSON array of folders that were deleted |
+| `ref` | Git ref used for comparison |
+| `has-changes` | Boolean indicating if any changes were detected |
+
+## Matrix Output Format
+
+The matrix output includes an array of apps with their Dockerfiles:
+
+```json
+{
+  "include": [
+    {
+      "path": "services/api",
+      "app_name": "api",
+      "app_config": "services/api/app.yaml",  // May be null
+      "dockerfiles": [
+        {
+          "path": "services/api/Dockerfile",
+          "name": "Dockerfile",
+          "suffix": ""
+        },
+        {
+          "path": "services/api/Dockerfile.sidecar",
+          "name": "Dockerfile.sidecar",
+          "suffix": "sidecar"
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Example Workflows
+
+### Simple Docker Build
+
+```yaml
+name: Build Docker Images
 
 on:
   push:
@@ -27,16 +106,17 @@ jobs:
   analyze:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.scope.outputs.matrix }}
-      has-changes: ${{ steps.scope.outputs.has-changes }}
+      matrix: ${{ steps.analyze.outputs.matrix }}
+      has-changes: ${{ steps.analyze.outputs.has-changes }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Analyze changes
-        id: scope
-        uses: HafslundEcoVannkraft/stratus-gh-actions/build-scope-analyzer@main
+          
+      - id: analyze
+        uses: HafslundEcoVannkraft/stratus-gh-actions/build-scope-analyzer@v3
+        with:
+          include-pattern: 'services/*'
 
   build:
     needs: analyze
@@ -47,75 +127,80 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}/${{ matrix.app_name }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=sha
-      
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: ${{ matrix.path }}
-          file: ${{ matrix.dockerfile }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+      - name: Build images
+        run: |
+          for dockerfile in $(echo '${{ toJson(matrix.dockerfiles) }}' | jq -r '.[].path'); do
+            docker build -f "$dockerfile" -t "myimage:latest" .
+          done
 ```
 
-### With Path Filtering
+### Container Apps Deployment
 
 ```yaml
-- name: Analyze changes
-  id: scope
-  uses: HafslundEcoVannkraft/stratus-gh-actions/build-scope-analyzer@main
-  with:
-    include-pattern: 'apps/*'  # Only analyze apps folder
-    # OR
-    exclude-pattern: 'tests/*' # Exclude test folders
+name: Deploy Container Apps
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.analyze.outputs.matrix }}
+      has-changes: ${{ steps.analyze.outputs.has-changes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - id: analyze
+        uses: HafslundEcoVannkraft/stratus-gh-actions/build-scope-analyzer@v3
+        with:
+          include-pattern: 'apps/*'
+          require-app-config: true
+
+  deploy:
+    needs: analyze
+    if: needs.analyze.outputs.has-changes == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.analyze.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build and deploy
+        run: |
+          # Build only if Dockerfiles exist
+          if [ $(echo '${{ toJson(matrix.dockerfiles) }}' | jq '. | length') -gt 0 ]; then
+            echo "Building Docker images..."
+            # Build logic here
+          fi
+          
+          # Deploy using app.yaml
+          if [ -n "${{ matrix.app_config }}" ]; then
+            echo "Deploying with ${{ matrix.app_config }}"
+            # Deploy logic here
+          fi
 ```
 
-## Inputs
+## Behavior by Mode
 
-| Input | Description | Required | Default |
-|-------|-------------|----------|---------|
-| `root-path` | Root path to search for changes | No | `${{ github.workspace }}` |
-| `include-pattern` | Glob pattern for paths to include | No | `''` |
-| `exclude-pattern` | Glob pattern for paths to exclude | No | `''` |
-| `ref` | Git ref to compare against | No | Auto-detected |
+### Default Mode (`require-app-config: false`)
+- Includes any folder with Dockerfiles
+- app.yaml is optional
+- Best for generic Docker workflows
 
-## Outputs
+### Container Apps Mode (`require-app-config: true`)
+- Includes folders with Dockerfiles
+- Includes folders with app.yaml/app.yml (even without Dockerfiles)
+- Best for Azure Container Apps workflows
 
-| Output | Description | Example |
-|--------|-------------|---------|
-| `matrix` | JSON matrix for GitHub Actions | `{"include":[{"path":"app1","app_name":"frontend","dockerfile":"app1/Dockerfile"}]}` |
-| `has-changes` | Boolean indicating if changes detected | `true` |
-| `deleted-folders` | JSON array of deleted folders | `["old-app"]` |
-| `ref` | Git ref used for comparison | `origin/main` |
+## Git Comparison Logic
 
-## How It Works
-
-1. **Git Diff Detection**: Compares current commit against:
-   - Base branch for pull requests
-   - Previous commit for push events
-
-2. **App Discovery**: For each changed folder, looks for:
-   - `app.yaml` or `app.yml` configuration files
-   - `Dockerfile` for container builds
-
-3. **App Name Resolution**:
-   - First tries to extract from `app.yaml` (`name` field)
-   - Falls back to folder name if not found
-
-4. **Matrix Generation**: Creates a matrix entry for each app with:
-   - `path`: Folder path
-   - `app_name`: Resolved app name
-   - `dockerfile`: Path to Dockerfile
-   - `app_config`: Path to app configuration (if exists)
+- **Pull Requests**: Compares against the base branch
+- **Push Events**: Compares against the previous commit
+- **Manual Ref**: Use the `ref` input to specify a custom comparison point
 
 ## Best Practices
 

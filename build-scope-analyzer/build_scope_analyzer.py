@@ -1,32 +1,33 @@
 #!/usr/bin/env python3
 """
-Build Scope Analyzer - Analyze git changes and generate strategy matrix for GitHub Actions
+Build Scope Analyzer V3 - Enhanced deletion tracking
 
-This script analyzes git diff to identify what needs to be built and generates
-output suitable for GitHub Actions strategy matrix.
+This script analyzes git diff to identify what needs to be built and what was deleted.
+It provides detailed deletion information for proper cleanup in CI/CD pipelines.
 """
 
 import os
 import sys
 import json
-import yaml
 import subprocess
 import argparse
 import fnmatch
-import datetime
 from pathlib import Path
-from typing import List, Dict, Set, Optional, Tuple
+from typing import List, Dict, Set, Optional, Tuple, Any
 
 
 class BuildScopeAnalyzer:
     """Analyzes git changes and generates strategy matrix output"""
     
-    def __init__(self, root_path: str, include_pattern: str = '', exclude_pattern: str = ''):
+    def __init__(self, root_path: str, include_pattern: str = '', exclude_pattern: str = '', 
+                 require_app_config: bool = False):
         self.root_path = Path(root_path).resolve()
         self.include_pattern = include_pattern
         self.exclude_pattern = exclude_pattern
+        self.require_app_config = require_app_config
         self.changed_files: Set[Path] = set()
         self.deleted_files: Set[Path] = set()
+        self.renamed_files: Dict[Path, Path] = {}  # old_path -> new_path
         
     def run_git_command(self, cmd: List[str]) -> str:
         """Execute a git command and return output"""
@@ -54,49 +55,194 @@ class BuildScopeAnalyzer:
             # For push events, compare against previous commit
             return "HEAD~1"
             
-    def get_changed_files(self) -> Tuple[Set[Path], Set[Path]]:
-        """Get list of changed and deleted files from git diff"""
+    def get_changed_files(self) -> Tuple[Set[Path], Set[Path], Dict[Path, Path]]:
+        """Get list of changed, deleted, and renamed files from git diff"""
         ref = self.get_comparison_ref()
         
-        # Get changed files
-        diff_output = self.run_git_command(['git', 'diff', '--name-only', ref])
+        # Get all changes with status
+        diff_output = self.run_git_command(['git', 'diff', '--name-status', ref])
+        
         changed = set()
-        for line in diff_output.splitlines():
-            if line:
-                changed.add(Path(line))
-                
-        # Get deleted files
-        diff_deleted = self.run_git_command(['git', 'diff', '--diff-filter=D', '--name-only', ref])
         deleted = set()
-        for line in diff_deleted.splitlines():
-            if line:
-                deleted.add(Path(line))
+        renamed = {}
+        
+        for line in diff_output.splitlines():
+            if not line:
+                continue
                 
-        return changed, deleted
+            parts = line.split('\t')
+            if len(parts) < 2:
+                continue
+                
+            status = parts[0]
+            
+            if status == 'D':  # Deleted
+                deleted.add(Path(parts[1]))
+            elif status == 'R':  # Renamed
+                if len(parts) >= 3:
+                    old_path = Path(parts[1])
+                    new_path = Path(parts[2])
+                    renamed[old_path] = new_path
+                    changed.add(new_path)
+            elif status in ['A', 'M']:  # Added or Modified
+                changed.add(Path(parts[1]))
+                
+        return changed, deleted, renamed
         
     def should_include_path(self, path: Path) -> bool:
         """Check if path should be included based on patterns"""
         path_str = str(path)
         
-        if self.include_pattern and self.exclude_pattern:
-            # Include paths that match the include_pattern unless they also match the exclude_pattern
-            return fnmatch.fnmatch(path_str, self.include_pattern) and not fnmatch.fnmatch(path_str, self.exclude_pattern)
-            
+        # First check include pattern if specified
         if self.include_pattern:
-            return fnmatch.fnmatch(path_str, self.include_pattern)
-            
+            if not fnmatch.fnmatch(path_str, self.include_pattern):
+                return False
+                
+        # Then check exclude pattern if specified
         if self.exclude_pattern:
-            return not fnmatch.fnmatch(path_str, self.exclude_pattern)
-            
+            if fnmatch.fnmatch(path_str, self.exclude_pattern):
+                return False
+                
         return True
         
-    def find_app_folders(self) -> Dict[Path, Dict]:
+    def find_dockerfiles(self, folder: Path) -> List[Dict[str, str]]:
+        """Find all Dockerfiles in a folder and return info about them"""
+        dockerfiles = []
+        full_folder = self.root_path / folder
+        
+        # Look for all files starting with "Dockerfile"
+        for file in full_folder.glob("Dockerfile*"):
+            if file.is_file():
+                dockerfile_info = {
+                    'path': str(folder / file.name),
+                    'name': file.name
+                }
+                
+                # Determine the container name based on Dockerfile name
+                if file.name == "Dockerfile":
+                    dockerfile_info['suffix'] = ''
+                else:
+                    # Extract suffix (e.g., "sidecar" from "Dockerfile.sidecar")
+                    dockerfile_info['suffix'] = file.name.replace("Dockerfile.", "")
+                    
+                dockerfiles.append(dockerfile_info)
+                
+        return dockerfiles
+        
+    def find_app_yaml(self, folder: Path) -> Optional[str]:
+        """Check if app.yaml or app.yml exists in folder"""
+        full_folder = self.root_path / folder
+        
+        for config_name in ['app.yaml', 'app.yml']:
+            config_path = full_folder / config_name
+            if config_path.exists():
+                return str(folder / config_name)
+                
+        return None
+        
+    def analyze_deletions(self) -> Dict[str, Any]:
+        """Analyze deleted files to determine what cleanup is needed"""
+        deletions = {
+            'apps': [],  # Apps that need terraform destroy
+            'containers': [],  # Container images that need ACR cleanup
+            'folders': []  # Entire folders that were deleted
+        }
+        
+        # Group deletions by folder
+        deleted_by_folder: Dict[Path, Dict[str, List[Path]]] = {}
+        
+        for file_path in self.deleted_files:
+            if not self.should_include_path(file_path):
+                continue
+                
+            folder = file_path.parent
+            if folder not in deleted_by_folder:
+                deleted_by_folder[folder] = {
+                    'dockerfiles': [],
+                    'app_configs': [],
+                    'other_files': []
+                }
+                
+            filename = file_path.name
+            if filename.startswith('Dockerfile'):
+                deleted_by_folder[folder]['dockerfiles'].append(file_path)
+            elif filename in ['app.yaml', 'app.yml']:
+                deleted_by_folder[folder]['app_configs'].append(file_path)
+            else:
+                deleted_by_folder[folder]['other_files'].append(file_path)
+                
+        # Check if entire folders were deleted
+        for folder_path in deleted_by_folder:
+            # Check if the folder itself still exists
+            if not (self.root_path / folder_path).exists():
+                deletions['folders'].append({
+                    'path': str(folder_path),
+                    'app_name': folder_path.name
+                })
+                continue
+                
+        # Analyze partial deletions
+        for folder, deleted_items in deleted_by_folder.items():
+            app_name = folder.name
+            
+            # If app.yaml was deleted, the app needs to be destroyed
+            if deleted_items['app_configs']:
+                deletions['apps'].append({
+                    'path': str(folder),
+                    'app_name': app_name,
+                    'deleted_config': str(deleted_items['app_configs'][0])
+                })
+                
+            # Track deleted containers (Dockerfiles)
+            for dockerfile in deleted_items['dockerfiles']:
+                dockerfile_name = dockerfile.name
+                if dockerfile_name == 'Dockerfile':
+                    container_name = app_name
+                else:
+                    suffix = dockerfile_name.replace('Dockerfile.', '')
+                    container_name = f"{app_name}-{suffix}"
+                    
+                deletions['containers'].append({
+                    'app_name': app_name,
+                    'container_name': container_name,
+                    'dockerfile': str(dockerfile),
+                    'image_name': container_name  # This matches the build naming convention
+                })
+                
+        return deletions
+        
+    def analyze_folder(self, folder: Path, changed_files: Set[Path]) -> Optional[Dict]:
+        """Analyze a folder for Dockerfiles and optionally app configuration"""
+        dockerfiles = self.find_dockerfiles(folder)
+        app_config = self.find_app_yaml(folder)
+        
+        # Determine if we should include this folder based on mode
+        if self.require_app_config:
+            # Container Apps mode: need either app.yaml or Dockerfiles
+            if not app_config and not dockerfiles:
+                return None
+        else:
+            # Docker build mode: only need Dockerfiles
+            if not dockerfiles:
+                return None
+            
+        # Use folder name as app name
+        app_name = folder.name
+            
+        return {
+            'path': str(folder),
+            'app_name': app_name,
+            'app_config': app_config,  # Can be None
+            'dockerfiles': dockerfiles,  # Can be empty if require_app_config=True
+            'changed_files': [str(f) for f in changed_files]
+        }
+        
+    def find_app_folders(self) -> Dict[str, Any]:
         """Find folders containing changed files and analyze them"""
-        self.changed_files, self.deleted_files = self.get_changed_files()
+        self.changed_files, self.deleted_files, self.renamed_files = self.get_changed_files()
         
         # Group files by their parent directories
         changed_folders: Dict[Path, Set[Path]] = {}
-        deleted_folders: Set[Path] = set()
         
         for file_path in self.changed_files:
             if self.should_include_path(file_path):
@@ -105,10 +251,6 @@ class BuildScopeAnalyzer:
                     changed_folders[folder] = set()
                 changed_folders[folder].add(file_path)
                 
-        for file_path in self.deleted_files:
-            if self.should_include_path(file_path):
-                deleted_folders.add(file_path.parent)
-                
         # Analyze each folder
         apps = {}
         for folder, files in changed_folders.items():
@@ -116,115 +258,40 @@ class BuildScopeAnalyzer:
             if app_info:
                 apps[folder] = app_info
                 
+        # Analyze deletions
+        deletions = self.analyze_deletions()
+                
         return {
             'apps': apps,
-            'deleted_folders': list(str(f) for f in deleted_folders),
+            'deletions': deletions,
             'ref': self.get_comparison_ref()
         }
-        
-    def analyze_folder(self, folder: Path, changed_files: Set[Path]) -> Optional[Dict]:
-        """Analyze a folder for app configuration and Docker files"""
-        full_folder = self.root_path / folder
-        
-        # Look for app.yml or app.yaml
-        app_config_path = None
-        app_config = None
-        for config_name in ['app.yml', 'app.yaml']:
-            config_path = full_folder / config_name
-            if config_path.exists():
-                app_config_path = folder / config_name
-                try:
-                    with open(config_path, 'r') as f:
-                        app_config = yaml.safe_load(f)
-                except Exception as e:
-                    print(f"Warning: Failed to parse {config_path}: {e}", file=sys.stderr)
-                break
-                
-        # Look for Dockerfile
-        dockerfile_path = None
-        dockerfile_full = full_folder / 'Dockerfile'
-        if dockerfile_full.exists():
-            dockerfile_path = folder / 'Dockerfile'
-            
-        # Skip folders without app config or Dockerfile
-        if not app_config_path and not dockerfile_path:
-            return None
-            
-        # Extract app name
-        app_name = None
-        if app_config and isinstance(app_config, dict):
-            # Try to find app name in config
-            app_name = app_config.get('name')
-            if not app_name:
-                # Try to find primary source name
-                template = app_config.get('template', {})
-                containers = template.get('containers', [])
-                if containers and isinstance(containers, list):
-                    app_name = containers[0].get('name')
-                    
-        # Fallback to folder basename
-        if not app_name:
-            app_name = folder.name
-            
-        return {
-            'path': str(folder),
-            'app_name': app_name,
-            'app_config': str(app_config_path) if app_config_path else None,
-            'dockerfile': str(dockerfile_path) if dockerfile_path else None,
-            'changed_files': [str(f) for f in changed_files]
-        }
-        
-    def generate_docker_tags(self, app_info: Dict) -> List[str]:
-        """Generate Docker tags for an app"""
-        tags = []
-        
-        # Basic tags based on git context
-        sha = os.environ.get('GITHUB_SHA', 'latest')[:7]
-        ref_name = os.environ.get('GITHUB_REF_NAME', 'main')
-        
-        # Add SHA tag
-        tags.append(sha)
-        
-        # Add branch/tag based tags
-        if ref_name:
-            # Clean ref name for use as Docker tag
-            clean_ref = ref_name.replace('/', '-').replace('_', '-')
-            tags.append(clean_ref)
-            
-            # If it's main/master, also tag as latest
-            if ref_name in ['main', 'master']:
-                tags.append('latest')
-                
-        # Add timestamp tag
-        timestamp = datetime.datetime.utcnow().strftime('%Y%m%d-%H%M%S')
-        tags.append(timestamp)
-        
-        return tags
         
     def generate_matrix_output(self) -> Dict:
         """Generate output suitable for GitHub Actions matrix"""
         analysis = self.find_app_folders()
         
+        # Generate matrix items - one per app
         matrix_items = []
         for folder, app_info in analysis['apps'].items():
-            if app_info['dockerfile']:  # Only include apps with Dockerfiles
-                item = {
-                    'path': app_info['path'],
-                    'app_name': app_info['app_name'],
-                    'dockerfile': app_info['dockerfile']
-                }
-                if app_info['app_config']:
-                    item['app_config'] = app_info['app_config']
-                    
-                matrix_items.append(item)
+            item = {
+                'path': app_info['path'],
+                'app_name': app_info['app_name'],
+                'dockerfiles': app_info['dockerfiles']  # Can be empty for pre-built only apps
+            }
+            if app_info['app_config']:
+                item['app_config'] = app_info['app_config']
+                
+            matrix_items.append(item)
                 
         return {
             'matrix': {
                 'include': matrix_items
             },
-            'deleted_folders': analysis['deleted_folders'],
+            'deletions': analysis['deletions'],
             'ref': analysis['ref'],
-            'has_changes': len(matrix_items) > 0
+            'has_changes': len(matrix_items) > 0,
+            'has_deletions': any(analysis['deletions'].values())
         }
 
 
@@ -238,36 +305,45 @@ def main():
     parser.add_argument('--ref', help='Git ref to compare against')
     parser.add_argument('--output-format', choices=['json', 'github'], default='github',
                         help='Output format')
+    parser.add_argument('--require-app-config', action='store_true',
+                        help='Require app.yaml/app.yml for Container Apps mode')
     
     args = parser.parse_args()
-    
-    # Validate pattern arguments
-    if args.include_pattern and args.exclude_pattern:
-        parser.error("Cannot specify both --include-pattern and --exclude-pattern")
     
     analyzer = BuildScopeAnalyzer(
         root_path=args.root_path,
         include_pattern=args.include_pattern,
-        exclude_pattern=args.exclude_pattern
+        exclude_pattern=args.exclude_pattern,
+        require_app_config=args.require_app_config
     )
     
     output = analyzer.generate_matrix_output()
     
     if args.output_format == 'github':
-        # Output in GitHub Actions format (using new format)
+        # Output in GitHub Actions format
         github_output = os.environ.get('GITHUB_OUTPUT')
         if github_output:
             with open(github_output, 'a') as f:
                 f.write(f"matrix={json.dumps(output['matrix'])}\n")
-                f.write(f"deleted_folders={json.dumps(output['deleted_folders'])}\n")
+                f.write(f"deletions={json.dumps(output['deletions'])}\n")
                 f.write(f"ref={output['ref']}\n")
                 f.write(f"has_changes={str(output['has_changes']).lower()}\n")
+                f.write(f"has_deletions={str(output['has_deletions']).lower()}\n")
+                
+                # Also output specific deletion types for easier consumption
+                f.write(f"deleted_apps={json.dumps(output['deletions']['apps'])}\n")
+                f.write(f"deleted_containers={json.dumps(output['deletions']['containers'])}\n")
+                f.write(f"deleted_folders={json.dumps(output['deletions']['folders'])}\n")
         else:
             # Fallback to console output for testing
             print(f"matrix={json.dumps(output['matrix'])}")
-            print(f"deleted_folders={json.dumps(output['deleted_folders'])}")
+            print(f"deletions={json.dumps(output['deletions'])}")
             print(f"ref={output['ref']}")
             print(f"has_changes={str(output['has_changes']).lower()}")
+            print(f"has_deletions={str(output['has_deletions']).lower()}")
+            print(f"deleted_apps={json.dumps(output['deletions']['apps'])}")
+            print(f"deleted_containers={json.dumps(output['deletions']['containers'])}")
+            print(f"deleted_folders={json.dumps(output['deletions']['folders'])}")
     else:
         # Output as JSON
         print(json.dumps(output, indent=2))

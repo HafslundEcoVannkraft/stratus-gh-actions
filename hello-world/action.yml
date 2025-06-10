@@ -5,4 +5,4 @@ runs:
   steps:
     - name: Execute entrypoint script
       shell: bash
-      run: ./entrypoint.sh
+      run: ${{ github.action_path }}/entrypoint.sh

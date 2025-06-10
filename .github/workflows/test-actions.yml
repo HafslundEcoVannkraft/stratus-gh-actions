@@ -126,7 +126,7 @@ jobs:
           fi
       
       - name: Delete Test Release
-        if: always()
+        if: false
         run: |
           # Delete the release if it was created
           if [[ -n "${{ steps.release.outputs.new_version }}" ]]; then

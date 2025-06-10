@@ -1,0 +1,89 @@
+name: Test Actions
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'hello-world/**'
+      - 'release/**'
+      - 'build-scope-analyzer/**'
+      - '.github/workflows/test-actions.yml'
+
+jobs:
+  test-hello-world:
+    name: Test Hello World Action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Test Hello World Action
+        uses: ./hello-world
+        with:
+          who-to-greet: 'GitHub Actions'
+
+  test-release:
+    name: Test Release Action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+      
+      - name: Create Test Release
+        id: release
+        uses: ./release
+        with:
+          draft: true
+          prerelease: true
+      
+      - name: Verify Release
+        run: |
+          echo "Created release: ${{ steps.release.outputs.release_id }}"
+          echo "Release URL: ${{ steps.release.outputs.release_url }}"
+      
+      - name: Delete Test Release
+        run: |
+          gh release delete ${{ steps.release.outputs.release_id }} --yes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  test-build-scope-analyzer:
+    name: Test Build Scope Analyzer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create Test Files
+        run: |
+          mkdir -p src/helloworld
+          echo "FROM node:18" > src/helloworld/Dockerfile
+          echo "WORKDIR /app" >> src/helloworld/Dockerfile
+          echo "COPY . ." >> src/helloworld/Dockerfile
+          echo "CMD [\"node\", \"index.js\"]" >> src/helloworld/Dockerfile
+          
+          echo "name: hello-world" > src/helloworld/app.yaml
+          echo "version: 1.0.0" >> src/helloworld/app.yaml
+          echo "description: Test application" >> src/helloworld/app.yaml
+      
+      - name: Analyze Build Scope
+        id: scope
+        uses: ./build-scope-analyzer
+        with:
+          paths: |
+            src: 'src/**/*'
+            docker: '**/Dockerfile'
+            yaml: '**/*.yaml'
+      
+      - name: Verify Analysis
+        run: |
+          echo "Changes detected: ${{ steps.scope.outputs.changes_detected }}"
+          echo "Changed files: ${{ steps.scope.outputs.changed_files }}"
+          echo "Matched patterns: ${{ steps.scope.outputs.matched_patterns }}"
+          echo "src changes: ${{ steps.scope.outputs.src }}"
+          echo "docker changes: ${{ steps.scope.outputs.docker }}"
+          echo "yaml changes: ${{ steps.scope.outputs.yaml }}" 

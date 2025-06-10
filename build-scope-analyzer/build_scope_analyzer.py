@@ -13,6 +13,7 @@ import yaml
 import subprocess
 import argparse
 import fnmatch
+import datetime
 from pathlib import Path
 from typing import List, Dict, Set, Optional, Tuple
 
@@ -194,7 +195,6 @@ class BuildScopeAnalyzer:
                 tags.append('latest')
                 
         # Add timestamp tag
-        import datetime
         timestamp = datetime.datetime.utcnow().strftime('%Y%m%d-%H%M%S')
         tags.append(timestamp)
         

@@ -79,7 +79,8 @@ class BuildScopeAnalyzer:
         path_str = str(path)
         
         if self.include_pattern and self.exclude_pattern:
-            raise ValueError("Cannot specify both include and exclude patterns")
+            # Include paths that match the include_pattern unless they also match the exclude_pattern
+            return fnmatch.fnmatch(path_str, self.include_pattern) and not fnmatch.fnmatch(path_str, self.exclude_pattern)
             
         if self.include_pattern:
             return fnmatch.fnmatch(path_str, self.include_pattern)

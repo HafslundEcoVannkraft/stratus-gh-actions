@@ -68,24 +68,6 @@ This action doesn't produce any outputs. It simply prints "Hello world from stra
   uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@main
 ```
 
-### Using with Other Actions from the Same Monorepo
-
-```yaml
-jobs:
-  greet:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: First Greeting
-        uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@main
-        
-      - name: Custom Message
-        run: echo "This is a custom message"
-        
-      - name: Another Action
-        uses: HafslundEcoVannkraft/stratus-gh-actions/release@main
-```
 
 ### Using Specific Version
 

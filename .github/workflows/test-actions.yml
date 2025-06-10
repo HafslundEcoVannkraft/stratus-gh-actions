@@ -20,9 +20,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Make entrypoint executable
-        run: chmod +x ./hello-world/entrypoint.sh
-      
       - name: Test Hello World Action
         uses: ./hello-world
 
@@ -56,18 +53,84 @@ jobs:
           draft: true
           prerelease: true
       
+      - name: Capture Release Details
+        id: release-details
+        if: steps.release.outputs.release_url != ''
+        run: |
+          # Get the release details using GitHub CLI
+          release_body=$(gh release view ${{ steps.release.outputs.new_version }} --json body -q .body)
+          
+          # Save to file for multi-line handling
+          echo "$release_body" > release-notes.md
+          
+          # Also get release metadata
+          gh release view ${{ steps.release.outputs.new_version }} --json name,tagName,isDraft,isPrerelease,createdAt > release-metadata.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Post Release Preview to PR
+        if: github.event_name == 'pull_request' && steps.release.outputs.release_url != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Read the release notes and metadata
+            const releaseNotes = fs.readFileSync('release-notes.md', 'utf8');
+            const metadata = JSON.parse(fs.readFileSync('release-metadata.json', 'utf8'));
+            
+            // Create a formatted comment
+            const comment = `## 🎯 Release Action Test Results
+            
+            ### Release Metadata
+            - **Version**: ${metadata.tagName}
+            - **Name**: ${metadata.name}
+            - **Type**: ${metadata.isDraft ? '📝 Draft' : '📢 Published'} ${metadata.isPrerelease ? '(Pre-release)' : ''}
+            - **Created**: ${new Date(metadata.createdAt).toLocaleString()}
+            - **Bump Type**: ${{ steps.release.outputs.bump_type }}
+            - **Previous Version**: ${{ steps.release.outputs.previous_version }}
+            
+            ### Release Notes Preview
+            
+            <details>
+            <summary>Click to expand release notes</summary>
+            
+            ${releaseNotes}
+            
+            </details>
+            
+            ### Release URL
+            🔗 [View test release](${{ steps.release.outputs.release_url }})
+            
+            > **Note**: This test release will be automatically deleted after verification.`;
+            
+            // Post the comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });
+      
       - name: Verify Release
         run: |
-          echo "Created release: ${{ steps.release.outputs.new_version }}"
-          echo "Previous version: ${{ steps.release.outputs.previous_version }}"
-          echo "Release URL: ${{ steps.release.outputs.release_url }}"
+          echo "✅ Release created successfully"
+          echo "Version: ${{ steps.release.outputs.new_version }}"
+          echo "Previous: ${{ steps.release.outputs.previous_version }}"
           echo "Bump type: ${{ steps.release.outputs.bump_type }}"
+          echo "URL: ${{ steps.release.outputs.release_url }}"
+          
+          if [[ -f release-notes.md ]]; then
+            echo -e "\n📝 Release Notes:"
+            cat release-notes.md
+          fi
       
       - name: Delete Test Release
         if: always()
         run: |
           # Delete the release if it was created
           if [[ -n "${{ steps.release.outputs.new_version }}" ]]; then
+            echo "🗑️ Cleaning up test release..."
             gh release delete ${{ steps.release.outputs.new_version }} --yes || true
           fi
           

@@ -10,7 +10,7 @@ import json
 import shutil
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from build_scope_analyzer import BuildScopeAnalyzer
 
 def create_test_environment(test_dir: str):

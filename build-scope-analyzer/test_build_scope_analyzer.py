@@ -313,9 +313,15 @@ def test_deletions():
             print("Deletions output:")
             print(json.dumps(result['deletions'], indent=2))
             
-            assert len(result['deletions']['folders']) == 1, "Should have 1 deleted folder"
-            deleted_folder = result['deletions']['folders'][0]
-            assert deleted_folder['app_name'] == 'deprecated-service'
+            # When folder is deleted, should appear in both apps and containers
+            assert len(result['deletions']['apps']) == 1, "Should have 1 deleted app"
+            deleted_app = result['deletions']['apps'][0]
+            assert deleted_app['app_name'] == 'deprecated-service'
+            assert deleted_app['deleted_config'] == 'folder_deleted'
+            
+            assert len(result['deletions']['containers']) == 1, "Should have 1 deleted container"
+            deleted_container = result['deletions']['containers'][0]
+            assert deleted_container['container_name'] == 'deprecated-service'
 
 def test_mixed_changes_and_deletions():
     """Test scenario with both changes and deletions"""
@@ -353,7 +359,6 @@ D\tapps/old-service/Dockerfile'''
             
             # Check deletions
             assert len(result['deletions']['containers']) >= 1, "Should have deleted containers"
-            assert len(result['deletions']['folders']) >= 1, "Should have deleted folders"
 
 def test_github_actions_output():
     """Test GitHub Actions output format"""
@@ -394,7 +399,6 @@ def test_github_actions_output():
             assert 'has_deletions=' in output_content
             assert 'deleted_apps=' in output_content
             assert 'deleted_containers=' in output_content
-            assert 'deleted_folders=' in output_content
             
             os.unlink(output_file.name)
 
@@ -431,6 +435,89 @@ def test_exclude_pattern():
             assert 'frontend' in app_names, "Should include frontend"
             assert 'test-app' not in app_names, "Should exclude test-app"
 
+def test_all_apps_output():
+    """Test all_apps output for workflow_dispatch scenarios"""
+    print("\n=== Test 8: All Apps Output ===")
+    
+    with tempfile.TemporaryDirectory() as test_dir:
+        # Create multiple apps
+        create_test_environment(test_dir, 'basic')
+        create_test_environment(test_dir, 'multi-container')
+        
+        analyzer = BuildScopeAnalyzer(
+            root_path=str(test_dir),
+            include_pattern='apps/*',
+            require_app_config=True
+        )
+        
+        def mock_git_command(cmd):
+            if '--name-status' in cmd:
+                # Only frontend has changes
+                return 'M\tapps/frontend/app.yaml'
+            return ''
+        
+        with patch.object(analyzer, 'run_git_command', side_effect=mock_git_command):
+            result = analyzer.generate_matrix_output()
+            
+            print("Changed apps (matrix):")
+            print(json.dumps(result['matrix'], indent=2))
+            print("\nAll apps (all_apps):")
+            print(json.dumps(result['all_apps'], indent=2))
+            
+            # Matrix should only have frontend (changed)
+            matrix_apps = [app['app_name'] for app in result['matrix']['include']]
+            assert len(matrix_apps) == 1, "Matrix should only have 1 changed app"
+            assert 'frontend' in matrix_apps, "Matrix should include frontend"
+            
+            # all_apps should have all apps regardless of changes
+            all_app_names = [app['app_name'] for app in result['all_apps']['include']]
+            assert len(all_app_names) >= 3, "Should find all apps"
+            assert 'frontend' in all_app_names, "Should include frontend"
+            assert 'backend' in all_app_names, "Should include backend"
+            assert 'secure-api' in all_app_names, "Should include secure-api"
+
+def test_workflow_dispatch_event():
+    """Test workflow_dispatch event handling"""
+    print("\n=== Test 9: Workflow Dispatch Event ===")
+    
+    with tempfile.TemporaryDirectory() as test_dir:
+        create_test_environment(test_dir, 'basic')
+        
+        analyzer = BuildScopeAnalyzer(
+            root_path=str(test_dir),
+            include_pattern='apps/*'
+        )
+        
+        # Mock workflow_dispatch event
+        with patch.dict(os.environ, {'GITHUB_EVENT_NAME': 'workflow_dispatch'}):
+            # Mock git command should not be called for workflow_dispatch
+            def mock_git_command(cmd):
+                if '--name-status' in cmd and 'HEAD~1' in cmd:
+                    raise Exception("Should not try to diff against HEAD~1 for workflow_dispatch")
+                return ''
+            
+            with patch.object(analyzer, 'run_git_command', side_effect=mock_git_command):
+                result = analyzer.generate_matrix_output()
+                
+                print("Matrix output (should be empty):")
+                print(json.dumps(result['matrix'], indent=2))
+                print("\nAll apps output:")
+                print(json.dumps(result['all_apps'], indent=2))
+                print(f"\nRef: {result['ref']}")
+                
+                # For workflow_dispatch, matrix should be empty (no changes)
+                assert len(result['matrix']['include']) == 0, "Matrix should be empty for workflow_dispatch"
+                assert not result['has_changes'], "Should have no changes for workflow_dispatch"
+                assert not result['has_deletions'], "Should have no deletions for workflow_dispatch"
+                
+                # But all_apps should still list all apps
+                all_app_names = [app['app_name'] for app in result['all_apps']['include']]
+                assert 'frontend' in all_app_names, "Should include frontend in all_apps"
+                assert 'backend' in all_app_names, "Should include backend in all_apps"
+                
+                # Ref should be empty for workflow_dispatch
+                assert result['ref'] == "", "Ref should be empty for workflow_dispatch"
+
 def run_all_tests():
     """Run all tests"""
     print("Running Build Scope Analyzer V3 Tests")
@@ -444,6 +531,8 @@ def run_all_tests():
         test_mixed_changes_and_deletions()
         test_github_actions_output()
         test_exclude_pattern()
+        test_all_apps_output()
+        test_workflow_dispatch_event()
         
         print("\n" + "=" * 50)
         print("✅ All tests passed!")

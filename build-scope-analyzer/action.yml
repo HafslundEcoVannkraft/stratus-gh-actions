@@ -31,13 +31,13 @@ outputs:
   all_apps:
     description: 'JSON matrix of all apps (regardless of changes) for workflow_dispatch scenarios'
     value: ${{ steps.analyze.outputs.all_apps }}
-  deleted-folders:
+  deleted_folders:
     description: 'JSON array of folders that were deleted (for cleanup)'
     value: ${{ steps.analyze.outputs.deleted_folders }}
   ref:
     description: 'Git ref used for comparison'
     value: ${{ steps.analyze.outputs.ref }}
-  has-changes:
+  has_changes:
     description: 'Boolean indicating if any changes were detected'
     value: ${{ steps.analyze.outputs.has_changes }}
 

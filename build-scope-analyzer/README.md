@@ -72,11 +72,12 @@ When an entire folder is deleted, the analyzer automatically populates both `del
 |--------|-------------|
 | `matrix` | JSON matrix of changed apps for GitHub Actions strategy |
 | `all_apps` | JSON matrix of all apps (for workflow_dispatch) |
-| `has_changes` | Boolean indicating if any changes were detected |
-| `has_deletions` | Boolean indicating if any deletions were detected |
+| `deletions` | JSON object containing all deletion information (apps and containers) |
 | `deleted_apps` | JSON array of apps where app.yaml was deleted or folder was removed |
 | `deleted_containers` | JSON array of deleted container images |
 | `ref` | Git ref used for comparison |
+| `has_changes` | Boolean indicating if any changes were detected |
+| `has_deletions` | Boolean indicating if any deletions were detected |
 
 ## Output Formats
 
@@ -172,6 +173,7 @@ jobs:
           include-pattern: 'apps/*'
           require-app-config: true
       
+      # To support both workflow dispatch, push/PR or flexibel option to process all_apps or just apps who have changes
       - id: final
         run: |
           # Use all_apps for workflow_dispatch, matrix for other events

@@ -31,15 +31,24 @@ outputs:
   all_apps:
     description: 'JSON matrix of all apps (regardless of changes) for workflow_dispatch scenarios'
     value: ${{ steps.analyze.outputs.all_apps }}
-  deleted_folders:
-    description: 'JSON array of folders that were deleted (for cleanup)'
-    value: ${{ steps.analyze.outputs.deleted_folders }}
+  deletions:
+    description: 'JSON object containing all deletion information (apps and containers)'
+    value: ${{ steps.analyze.outputs.deletions }}
+  deleted_apps:
+    description: 'JSON array of apps that were deleted (for cleanup)'
+    value: ${{ steps.analyze.outputs.deleted_apps }}
+  deleted_containers:
+    description: 'JSON array of containers that were deleted (for ACR cleanup)'
+    value: ${{ steps.analyze.outputs.deleted_containers }}
   ref:
     description: 'Git ref used for comparison'
     value: ${{ steps.analyze.outputs.ref }}
   has_changes:
     description: 'Boolean indicating if any changes were detected'
     value: ${{ steps.analyze.outputs.has_changes }}
+  has_deletions:
+    description: 'Boolean indicating if any deletions were detected'
+    value: ${{ steps.analyze.outputs.has_deletions }}
 
 runs:
   using: 'composite'

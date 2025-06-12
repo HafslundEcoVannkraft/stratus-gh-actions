@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      build_all:
+        description: 'Build all apps regardless of changes'
+        required: false
+        default: 'false'
+        type: boolean
 
 jobs:
   analyze:
@@ -12,8 +19,11 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.scope.outputs.matrix }}
-      has-changes: ${{ steps.scope.outputs.has-changes }}
-      deleted-folders: ${{ steps.scope.outputs.deleted-folders }}
+      all_apps: ${{ steps.scope.outputs.all_apps }}
+      has_changes: ${{ steps.scope.outputs.has_changes }}
+      has_deletions: ${{ steps.scope.outputs.has_deletions }}
+      deleted_apps: ${{ steps.scope.outputs.deleted_apps }}
+      deleted_containers: ${{ steps.scope.outputs.deleted_containers }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,78 +31,90 @@ jobs:
 
       - name: Analyze changes
         id: scope
-        uses: HafslundEcoVannkraft/stratus-gh-actions/build-scope-analyzer@main
+        uses: ./build-scope-analyzer  # or: HafslundEcoVannkraft/stratus-gh-actions/build-scope-analyzer@main
         with:
           root-path: ${{ github.workspace }}
-          # Optional: include-pattern: 'apps/*'
+          include-pattern: 'apps/*'
           # Optional: exclude-pattern: 'tests/*'
+          require-app-config: 'true'  # For Container Apps mode
 
   build-apps:
     name: Build ${{ matrix.app_name }}
     needs: analyze
-    if: needs.analyze.outputs.has-changes == 'true'
+    if: |
+      (github.event_name != 'workflow_dispatch' && needs.analyze.outputs.has_changes == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.build_all == true)
     runs-on: ubuntu-latest
     strategy:
-      matrix: ${{ fromJson(needs.analyze.outputs.matrix) }}
+      matrix: ${{ github.event_name == 'workflow_dispatch' && inputs.build_all == true && fromJson(needs.analyze.outputs.all_apps) || fromJson(needs.analyze.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ghcr.io/${{ github.repository }}/${{ matrix.app_name }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: ${{ matrix.path }}
-          file: ${{ matrix.dockerfile }}
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  deploy-apps:
-    name: Deploy Apps
-    needs: [analyze, build-apps]
-    if: github.ref == 'refs/heads/main' && needs.analyze.outputs.has-changes == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy to Azure Container Apps
+      - name: Build Docker images
+        if: matrix.dockerfiles != '[]'
         run: |
-          echo "Deploying apps from matrix:"
-          echo '${{ needs.analyze.outputs.matrix }}' | jq .
+          echo "Building Docker images for ${{ matrix.app_name }}"
+          echo "Dockerfiles: ${{ toJson(matrix.dockerfiles) }}"
+          
+          # Example: Build each Dockerfile
+          # for dockerfile in ${{ matrix.dockerfiles }}; do
+          #   docker build -f $dockerfile.path -t ${{ matrix.app_name }}-$dockerfile.suffix .
+          # done
 
-  cleanup-deleted:
+      - name: Deploy Container App
+        if: matrix.app_config != null
+        run: |
+          echo "Deploying ${{ matrix.app_name }} with config: ${{ matrix.app_config }}"
+          # Add your deployment logic here
+
+  cleanup-deleted-apps:
     name: Cleanup Deleted Apps
     needs: analyze
-    if: needs.analyze.outputs.deleted-folders != '[]'
+    if: needs.analyze.outputs.deleted_apps != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: ${{ fromJson(needs.analyze.outputs.deleted_apps) }}
+    steps:
+      - name: Destroy Container App
+        run: |
+          echo "Destroying app: ${{ matrix.app.app_name }}"
+          echo "Path: ${{ matrix.app.path }}"
+          echo "Deletion reason: ${{ matrix.app.deleted_config }}"
+          
+          # Add your cleanup logic here, e.g.:
+          # - Terraform destroy
+          # - Azure CLI commands to delete Container App
+          # - Remove from any service registries
+
+  cleanup-deleted-containers:
+    name: Cleanup Deleted Container Images
+    needs: analyze
+    if: needs.analyze.outputs.deleted_containers != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        container: ${{ fromJson(needs.analyze.outputs.deleted_containers) }}
+    steps:
+      - name: Delete from Container Registry
+        run: |
+          echo "Deleting container image: ${{ matrix.container.image_name }}"
+          echo "From app: ${{ matrix.container.app_name }}"
+          echo "Original Dockerfile: ${{ matrix.container.dockerfile }}"
+          
+          # Add your ACR cleanup logic here, e.g.:
+          # az acr repository delete --name myregistry --image ${{ matrix.container.image_name }} --yes
+
+  summary:
+    name: Summary
+    needs: [analyze, build-apps, cleanup-deleted-apps, cleanup-deleted-containers]
+    if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Process deleted apps
+      - name: Print Summary
         run: |
-          echo "Deleted folders:"
-          echo '${{ needs.analyze.outputs.deleted-folders }}' | jq .
-          # Add cleanup logic here 
+          echo "## Build Scope Analysis Summary"
+          echo "- Changes detected: ${{ needs.analyze.outputs.has_changes }}"
+          echo "- Deletions detected: ${{ needs.analyze.outputs.has_deletions }}"
+          echo "- Apps built: ${{ needs.build-apps.result == 'success' && 'Yes' || 'No' }}"
+          echo "- Cleanup performed: ${{ (needs.cleanup-deleted-apps.result == 'success' || needs.cleanup-deleted-containers.result == 'success') && 'Yes' || 'No' }}" 

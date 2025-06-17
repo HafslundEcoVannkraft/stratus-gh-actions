@@ -1,62 +1,63 @@
-name: 'Build Scope Analyzer'
-description: 'Analyze git changes to identify what needs to be built and generate strategy matrix'
-author: 'Stratus Team'
+name: "Build Scope Analyzer"
+description: "Analyze git changes to identify what needs to be built and generate strategy matrix"
+author: "Stratus Team"
 
 inputs:
   root-path:
-    description: 'Root path to search for changes (defaults to GITHUB_WORKSPACE)'
+    description: "Root path to search for changes (defaults to GITHUB_WORKSPACE)"
     required: false
     default: ${{ github.workspace }}
   include-pattern:
     description: 'Glob pattern for paths to include (e.g., "apps/*")'
     required: false
-    default: ''
+    default: ""
   exclude-pattern:
     description: 'Glob pattern for paths to exclude (e.g., "tests/*")'
     required: false
-    default: ''
+    default: ""
   ref:
-    description: 'Git ref to compare against (defaults to automatic detection)'
+    description: "Git ref to compare against (defaults to automatic detection)"
     required: false
-    default: ''
-  require-app-config:
-    description: 'Require app.yaml/app.yml files (for Container Apps mode)'
-    required: false
-    default: 'false'
+    default: ""
 
 outputs:
   matrix:
-    description: 'JSON matrix for GitHub Actions strategy'
+    description: |
+      Clean, focused JSON matrix structure with the following sub-properties:
+
+      - matrix.apps: Container app deployment information
+        - matrix.apps.updated: Array of changed apps with app.yaml/app.yml
+        - matrix.apps.all: Array of all apps with app.yaml/app.yml
+        - matrix.apps.deleted: Array of deleted apps
+        - matrix.apps.has_updates: Boolean indicating if any apps were changed
+        - matrix.apps.has_deletions: Boolean indicating if any apps were deleted
+
+      - matrix.containers: Docker container build information
+        - matrix.containers.updated: Array of changed containers, each with:
+            - path: App folder path
+            - context: Docker build context (from @context or defaults to app folder)
+            - app_name: App name
+            - dockerfile: Dockerfile info (path, name, suffix)
+            - image_name: Image name for tagging
+            - container_name: Canonical container name
+        - matrix.containers.all: Array of all containers (same structure as above)
+        - matrix.containers.deleted: Array of deleted containers
+        - matrix.containers.has_updates: Boolean indicating if any containers were changed
+        - matrix.containers.has_deletions: Boolean indicating if any containers were deleted
+
+      - matrix.ref: Git ref used for comparison
     value: ${{ steps.analyze.outputs.matrix }}
-  all_apps:
-    description: 'JSON matrix of all apps (regardless of changes) for workflow_dispatch scenarios'
-    value: ${{ steps.analyze.outputs.all_apps }}
-  deletions:
-    description: 'JSON object containing all deletion information (apps and containers)'
-    value: ${{ steps.analyze.outputs.deletions }}
-  deleted_apps:
-    description: 'JSON array of apps that were deleted (for cleanup)'
-    value: ${{ steps.analyze.outputs.deleted_apps }}
-  deleted_containers:
-    description: 'JSON array of containers that were deleted (for ACR cleanup)'
-    value: ${{ steps.analyze.outputs.deleted_containers }}
   ref:
-    description: 'Git ref used for comparison'
+    description: "Git ref used for comparison"
     value: ${{ steps.analyze.outputs.ref }}
-  has_changes:
-    description: 'Boolean indicating if any changes were detected'
-    value: ${{ steps.analyze.outputs.has_changes }}
-  has_deletions:
-    description: 'Boolean indicating if any deletions were detected'
-    value: ${{ steps.analyze.outputs.has_deletions }}
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.x'
+        python-version: "3.x"
 
     - name: Install dependencies
       shell: bash
@@ -71,5 +72,4 @@ runs:
           --root-path "${{ inputs.root-path }}" \
           --include-pattern "${{ inputs.include-pattern }}" \
           --exclude-pattern "${{ inputs.exclude-pattern }}" \
-          --ref "${{ inputs.ref }}" \
-          ${{ inputs.require-app-config == 'true' && '--require-app-config' || '' }}
+          --ref "${{ inputs.ref }}"

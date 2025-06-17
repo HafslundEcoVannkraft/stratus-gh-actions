@@ -24,4 +24,5 @@ echo "  - Type 'deactivate' in your terminal"
 echo "  - Or close your terminal session"
 echo "To remove the virtual environment completely:"
 echo "  - First deactivate it"
-echo "  - Then run: rm -rf venv" 
+echo "  - Then run: rm -rf venv"
+# No require_app_config or other special dependencies needed.

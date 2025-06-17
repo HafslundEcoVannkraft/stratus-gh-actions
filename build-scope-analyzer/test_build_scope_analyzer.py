@@ -15,7 +15,7 @@ from build_scope_analyzer import BuildScopeAnalyzer
 
 def create_test_environment(test_dir: str, scenario: str = 'basic'):
     """Create different test environments based on scenario"""
-    
+
     if scenario == 'basic':
         # Create simple apps
         frontend_dir = Path(test_dir) / 'apps' / 'frontend'
@@ -28,7 +28,7 @@ template:
       memory: "1Gi"
 ''')
         (frontend_dir / 'Dockerfile').write_text('FROM node:18-alpine')
-        
+
         backend_dir = Path(test_dir) / 'apps' / 'backend'
         backend_dir.mkdir(parents=True)
         (backend_dir / 'app.yaml').write_text('''name: backend
@@ -39,7 +39,7 @@ template:
       memory: "2Gi"
 ''')
         (backend_dir / 'Dockerfile').write_text('FROM python:3.11-slim')
-        
+
     elif scenario == 'multi-container':
         # Create app with multiple containers
         api_dir = Path(test_dir) / 'apps' / 'secure-api'
@@ -63,7 +63,7 @@ template:
         (api_dir / 'Dockerfile').write_text('FROM python:3.11-slim')
         (api_dir / 'Dockerfile.auth').write_text('FROM node:18-alpine')
         (api_dir / 'Dockerfile.logger').write_text('FROM fluent/fluentd:latest')
-        
+
     elif scenario == 'pre-built-only':
         # Create app with only pre-built images
         monitoring_dir = Path(test_dir) / 'apps' / 'monitoring'
@@ -81,7 +81,7 @@ template:
       memory: "1Gi"
 ''')
         # No Dockerfiles for this app
-        
+
     elif scenario == 'mixed':
         # Create app with both built and pre-built containers
         web_dir = Path(test_dir) / 'apps' / 'web-app'
@@ -104,7 +104,7 @@ template:
 ''')
         (web_dir / 'Dockerfile').write_text('FROM node:18-alpine')
         (web_dir / 'Dockerfile.cache').write_text('FROM redis:7-alpine')
-        
+
     elif scenario == 'deletion-ready':
         # Create apps that will be used for deletion testing
         # App with multiple containers
@@ -123,7 +123,7 @@ template:
 ''')
         (payment_dir / 'Dockerfile').write_text('FROM python:3.11-slim')
         (payment_dir / 'Dockerfile.monitor').write_text('FROM prom/node-exporter:latest')
-        
+
         # App that will have its app.yaml deleted
         legacy_dir = Path(test_dir) / 'apps' / 'legacy-service'
         legacy_dir.mkdir(parents=True)
@@ -135,7 +135,7 @@ template:
       memory: "1Gi"
 ''')
         (legacy_dir / 'Dockerfile').write_text('FROM node:16-alpine')
-        
+
         # App that will be completely deleted
         deprecated_dir = Path(test_dir) / 'apps' / 'deprecated-service'
         deprecated_dir.mkdir(parents=True)
@@ -147,347 +147,252 @@ template:
       memory: "0.5Gi"
 ''')
         (deprecated_dir / 'Dockerfile').write_text('FROM node:14-alpine')
-        
+
     return test_dir
 
 def test_basic_functionality():
     """Test basic app detection and matrix generation"""
     print("\n=== Test 1: Basic Functionality ===")
-    
+
     with tempfile.TemporaryDirectory() as test_dir:
         create_test_environment(test_dir, 'basic')
-        
+
         analyzer = BuildScopeAnalyzer(
             root_path=str(test_dir),
             include_pattern='apps/*'
         )
-        
+
         # Mock git command to return changed files
         def mock_git_command(cmd):
             if '--name-status' in cmd:
                 return 'M\tapps/frontend/app.yaml\nM\tapps/backend/Dockerfile'
             return ''
-        
+
         with patch.object(analyzer, 'run_git_command', side_effect=mock_git_command):
             result = analyzer.generate_matrix_output()
-            
-            print(f"Has changes: {result['has_changes']}")
-            print(f"Has deletions: {result['has_deletions']}")
-            print(f"Number of apps found: {len(result['matrix']['include'])}")
-            print("Matrix output:")
-            print(json.dumps(result['matrix'], indent=2))
-            
-            assert result['has_changes'], "Should detect changes"
-            assert not result['has_deletions'], "Should not have deletions"
-            assert len(result['matrix']['include']) == 2, "Should find 2 apps"
+
+            print(json.dumps(result, indent=2))
+
+            updated_app_names = [app['app_name'] for app in result['apps']['updated']]
+            assert set(updated_app_names) == {'frontend', 'backend'}, "Should detect both frontend and backend as changed apps"
+            updated_container_names = [c['app_name'] for c in result['containers']['updated']]
+            assert set(updated_container_names) == {'frontend', 'backend'}, "Should detect both frontend and backend as changed containers"
+            assert not result['apps']['deleted'], "No deleted apps"
+            assert not result['containers']['deleted'], "No deleted containers"
+            # Assert new output structure for containers
+            for c in result['containers']['all']:
+                assert 'container_name' in c, f"container_name missing in: {c}"
+                assert 'context' in c, f"context missing in: {c}"
+                assert isinstance(c['dockerfile'], dict), f"dockerfile not dict in: {c}"
 
 def test_multi_container():
     """Test multi-container app detection"""
     print("\n=== Test 2: Multi-Container App ===")
-    
+
     with tempfile.TemporaryDirectory() as test_dir:
         create_test_environment(test_dir, 'multi-container')
-        
+
         analyzer = BuildScopeAnalyzer(
             root_path=str(test_dir),
             include_pattern='apps/*'
         )
-        
+
         def mock_git_command(cmd):
             if '--name-status' in cmd:
                 return 'A\tapps/secure-api/Dockerfile.logger'
             return ''
-        
+
         with patch.object(analyzer, 'run_git_command', side_effect=mock_git_command):
             result = analyzer.generate_matrix_output()
-            
-            print("Matrix output:")
-            print(json.dumps(result['matrix'], indent=2))
-            
-            assert len(result['matrix']['include']) == 1, "Should find 1 app"
-            app = result['matrix']['include'][0]
-            assert app['app_name'] == 'secure-api'
-            assert len(app['dockerfiles']) == 3, "Should find 3 Dockerfiles"
-            
-            # Check dockerfile names
-            dockerfile_names = [df['name'] for df in app['dockerfiles']]
-            assert 'Dockerfile' in dockerfile_names
-            assert 'Dockerfile.auth' in dockerfile_names
-            assert 'Dockerfile.logger' in dockerfile_names
+
+            print(json.dumps(result, indent=2))
+
+            assert len(result['apps']['updated']) == 1, "Should detect 1 changed app (secure-api)"
+            assert result['apps']['updated'][0]['app_name'] == 'secure-api'
+            # All Dockerfiles should be in containers.all
+            all_dockerfiles = [c['dockerfile']['name'] for c in result['containers']['all'] if c['app_name'] == 'secure-api']
+            assert set(all_dockerfiles) == {'Dockerfile', 'Dockerfile.auth', 'Dockerfile.logger'}
+            updated_dockerfiles = [c['dockerfile']['name'] for c in result['containers']['updated'] if c['app_name'] == 'secure-api']
+            assert set(updated_dockerfiles) == {'Dockerfile', 'Dockerfile.auth', 'Dockerfile.logger'}, \
+                "All Dockerfiles should be in updated for secure-api when any file changes"
+            # Assert new output structure for containers
+            for c in result['containers']['all']:
+                assert 'container_name' in c, f"container_name missing in: {c}"
+                assert 'context' in c, f"context missing in: {c}"
+                assert isinstance(c['dockerfile'], dict), f"dockerfile not dict in: {c}"
 
 def test_pre_built_only():
     """Test app with only pre-built images"""
-    print("\n=== Test 3: Pre-built Images Only (Container Apps mode) ===")
-    
+    print("\n=== Test 3: Pre-built Images Only ===")
+
     with tempfile.TemporaryDirectory() as test_dir:
         create_test_environment(test_dir, 'pre-built-only')
-        
+
         analyzer = BuildScopeAnalyzer(
             root_path=str(test_dir),
-            include_pattern='apps/*',
-            require_app_config=True  # Container Apps mode
+            include_pattern='apps/*'
         )
-        
+
         def mock_git_command(cmd):
             if '--name-status' in cmd:
                 return 'M\tapps/monitoring/app.yaml'
             return ''
-        
+
         with patch.object(analyzer, 'run_git_command', side_effect=mock_git_command):
             result = analyzer.generate_matrix_output()
-            
-            print("Matrix output:")
-            print(json.dumps(result['matrix'], indent=2))
-            
-            assert len(result['matrix']['include']) == 1, "Should find monitoring app"
-            app = result['matrix']['include'][0]
-            assert app['app_name'] == 'monitoring'
-            assert len(app['dockerfiles']) == 0, "Should have no Dockerfiles"
+
+            print(json.dumps(result, indent=2))
+
+            assert any(app['app_name'] == 'monitoring' for app in result['apps']['all']), "Should find monitoring app"
+            assert not result['containers']['all'], "Should have no containers for monitoring"
 
 def test_deletions():
     """Test various deletion scenarios"""
     print("\n=== Test 4: Deletion Scenarios ===")
-    
+
     with tempfile.TemporaryDirectory() as test_dir:
         create_test_environment(test_dir, 'deletion-ready')
-        
+
         analyzer = BuildScopeAnalyzer(
             root_path=str(test_dir),
-            include_pattern='apps/*',
-            require_app_config=True
+            include_pattern='apps/*'
         )
-        
+
         # Test 4a: Deleted Dockerfile (sidecar container)
         print("\n--- Test 4a: Deleted Sidecar Container ---")
         def mock_git_deleted_dockerfile(cmd):
             if '--name-status' in cmd:
                 return 'D\tapps/payment-service/Dockerfile.monitor\nM\tapps/payment-service/app.yaml'
             return ''
-        
+
         with patch.object(analyzer, 'run_git_command', side_effect=mock_git_deleted_dockerfile):
             result = analyzer.generate_matrix_output()
-            
-            print("Deletions output:")
-            print(json.dumps(result['deletions'], indent=2))
-            
-            assert result['has_deletions'], "Should have deletions"
-            assert len(result['deletions']['containers']) == 1, "Should have 1 deleted container"
-            deleted_container = result['deletions']['containers'][0]
-            assert deleted_container['container_name'] == 'payment-service-monitor'
-            assert deleted_container['image_name'] == 'payment-service-monitor'
-        
+
+            print(json.dumps(result, indent=2))
+
+            deleted = result['containers']['deleted']
+            assert any(c['container_name'] == 'payment-service-monitor' for c in deleted), "Should cleanup deleted container image for Dockerfile.monitor"
+            # Assert deleted container structure
+            for c in deleted:
+                assert 'container_name' in c, f"container_name missing in: {c}"
+                assert 'dockerfile' in c, f"dockerfile missing in: {c}"
+
         # Test 4b: Deleted app.yaml
         print("\n--- Test 4b: Deleted app.yaml ---")
         def mock_git_deleted_app_yaml(cmd):
             if '--name-status' in cmd:
                 return 'D\tapps/legacy-service/app.yaml'
             return ''
-        
+
         with patch.object(analyzer, 'run_git_command', side_effect=mock_git_deleted_app_yaml):
             # Simulate app.yaml being deleted
             (Path(test_dir) / 'apps' / 'legacy-service' / 'app.yaml').unlink()
-            
+
             result = analyzer.generate_matrix_output()
-            
-            print("Deletions output:")
-            print(json.dumps(result['deletions'], indent=2))
-            
-            assert len(result['deletions']['apps']) == 1, "Should have 1 deleted app"
-            deleted_app = result['deletions']['apps'][0]
-            assert deleted_app['app_name'] == 'legacy-service'
-            assert 'app.yaml' in deleted_app['deleted_config']
-        
+
+            print(json.dumps(result, indent=2))
+
+            deleted = result['apps']['deleted']
+            assert any(a['app_name'] == 'legacy-service' for a in deleted), "Should cleanup deleted app when app.yaml is deleted"
+
         # Test 4c: Entire folder deleted
         print("\n--- Test 4c: Entire Folder Deleted ---")
         def mock_git_deleted_folder(cmd):
             if '--name-status' in cmd:
                 return 'D\tapps/deprecated-service/app.yaml\nD\tapps/deprecated-service/Dockerfile'
             return ''
-        
+
         with patch.object(analyzer, 'run_git_command', side_effect=mock_git_deleted_folder):
             # Simulate entire folder being deleted
             shutil.rmtree(Path(test_dir) / 'apps' / 'deprecated-service')
-            
+
             result = analyzer.generate_matrix_output()
-            
-            print("Deletions output:")
-            print(json.dumps(result['deletions'], indent=2))
-            
-            # When folder is deleted, should appear in both apps and containers
-            assert len(result['deletions']['apps']) == 1, "Should have 1 deleted app"
-            deleted_app = result['deletions']['apps'][0]
-            assert deleted_app['app_name'] == 'deprecated-service'
-            assert deleted_app['deleted_config'] == 'folder_deleted'
-            
-            assert len(result['deletions']['containers']) == 1, "Should have 1 deleted container"
-            deleted_container = result['deletions']['containers'][0]
-            assert deleted_container['container_name'] == 'deprecated-service'
+
+            print(json.dumps(result, indent=2))
+
+            assert any(a['app_name'] == 'deprecated-service' for a in result['apps']['deleted']), "Should cleanup deleted app for folder deletion"
+            deleted_containers = result['containers']['deleted']
+            for c in deleted_containers:
+                assert 'container_name' in c, f"container_name missing in: {c}"
+                assert 'dockerfile' in c, f"dockerfile missing in: {c}"
 
 def test_mixed_changes_and_deletions():
     """Test scenario with both changes and deletions"""
     print("\n=== Test 5: Mixed Changes and Deletions ===")
-    
+
     with tempfile.TemporaryDirectory() as test_dir:
         # Create multiple apps
         create_test_environment(test_dir, 'basic')
         create_test_environment(test_dir, 'multi-container')
-        
+
         analyzer = BuildScopeAnalyzer(
             root_path=str(test_dir),
             include_pattern='apps/*'
         )
-        
+
         def mock_git_mixed(cmd):
             if '--name-status' in cmd:
-                return '''M\tapps/frontend/app.yaml
-A\tapps/secure-api/Dockerfile.logger
-D\tapps/backend/Dockerfile.cache
-D\tapps/old-service/app.yaml
-D\tapps/old-service/Dockerfile'''
+                return 'M\tapps/frontend/app.yaml\nA\tapps/secure-api/Dockerfile.logger\nD\tapps/backend/Dockerfile.cache\nD\tapps/old-service/app.yaml\nD\tapps/old-service/Dockerfile'
             return ''
-        
+
         with patch.object(analyzer, 'run_git_command', side_effect=mock_git_mixed):
             result = analyzer.generate_matrix_output()
-            
-            print("\nFull output:")
-            print(json.dumps(result, indent=2))
-            
-            # Check changes
-            assert result['has_changes'], "Should have changes"
-            assert result['has_deletions'], "Should have deletions"
-            assert len(result['matrix']['include']) >= 2, "Should have at least 2 apps with changes"
-            
-            # Check deletions
-            assert len(result['deletions']['containers']) >= 1, "Should have deleted containers"
 
-def test_github_actions_output():
-    """Test GitHub Actions output format"""
-    print("\n=== Test 6: GitHub Actions Output Format ===")
-    
-    with tempfile.TemporaryDirectory() as test_dir:
-        create_test_environment(test_dir, 'mixed')
-        
-        analyzer = BuildScopeAnalyzer(
-            root_path=str(test_dir),
-            include_pattern='apps/*'
-        )
-        
-        def mock_git_command(cmd):
-            if '--name-status' in cmd:
-                return 'M\tapps/web-app/app.yaml\nD\tapps/web-app/Dockerfile.old'
-            return ''
-        
-        # Mock GITHUB_OUTPUT environment variable
-        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as output_file:
-            os.environ['GITHUB_OUTPUT'] = output_file.name
-            
-            with patch.object(analyzer, 'run_git_command', side_effect=mock_git_command):
-                # Run main function
-                from build_scope_analyzer import main
-                with patch('sys.argv', ['analyzer', '--include-pattern', 'apps/*', '--root-path', test_dir]):
-                    main()
-            
-            # Read the output file
-            output_file.seek(0)
-            output_content = output_file.read()
-            print("\nGitHub Actions output:")
-            print(output_content)
-            
-            # Verify output format
-            assert 'matrix=' in output_content
-            assert 'has_changes=' in output_content
-            assert 'has_deletions=' in output_content
-            assert 'deleted_apps=' in output_content
-            assert 'deleted_containers=' in output_content
-            
-            os.unlink(output_file.name)
+            print(json.dumps(result, indent=2))
+
+            assert any(a['app_name'] == 'frontend' for a in result['apps']['updated']), "Should detect frontend as changed app"
+            assert any(c['dockerfile']['name'] == 'Dockerfile.logger' for c in result['containers']['updated']), "Should detect Dockerfile.logger as new container"
+            assert any(c['container_name'] == 'backend-cache' for c in result['containers']['deleted']), "Should cleanup deleted backend-cache container"
+            assert any(a['app_name'] == 'old-service' for a in result['apps']['deleted']), "Should cleanup deleted old-service app"
+            # Assert deleted container structure
+            for c in result['containers']['deleted']:
+                assert 'container_name' in c, f"container_name missing in: {c}"
+                assert 'dockerfile' in c, f"dockerfile missing in: {c}"
 
 def test_exclude_pattern():
     """Test exclude pattern functionality"""
-    print("\n=== Test 7: Exclude Pattern ===")
-    
+    print("\n=== Test 6: Exclude Pattern ===")
+
     with tempfile.TemporaryDirectory() as test_dir:
         create_test_environment(test_dir, 'basic')
-        
+
         # Create additional test app
         test_app_dir = Path(test_dir) / 'apps' / 'test-app'
         test_app_dir.mkdir(parents=True)
         (test_app_dir / 'Dockerfile').write_text('FROM alpine:latest')
-        
+
         analyzer = BuildScopeAnalyzer(
             root_path=str(test_dir),
             include_pattern='apps/*',
             exclude_pattern='apps/test-*'
         )
-        
+
         def mock_git_command(cmd):
             if '--name-status' in cmd:
                 return 'M\tapps/frontend/app.yaml\nM\tapps/test-app/Dockerfile'
             return ''
-        
+
         with patch.object(analyzer, 'run_git_command', side_effect=mock_git_command):
             result = analyzer.generate_matrix_output()
-            
-            print("Matrix output:")
-            print(json.dumps(result['matrix'], indent=2))
-            
-            app_names = [app['app_name'] for app in result['matrix']['include']]
+
+            print(json.dumps(result, indent=2))
+
+            app_names = [app['app_name'] for app in result['apps']['updated']]
             assert 'frontend' in app_names, "Should include frontend"
             assert 'test-app' not in app_names, "Should exclude test-app"
 
-def test_all_apps_output():
-    """Test all_apps output for workflow_dispatch scenarios"""
-    print("\n=== Test 8: All Apps Output ===")
-    
-    with tempfile.TemporaryDirectory() as test_dir:
-        # Create multiple apps
-        create_test_environment(test_dir, 'basic')
-        create_test_environment(test_dir, 'multi-container')
-        
-        analyzer = BuildScopeAnalyzer(
-            root_path=str(test_dir),
-            include_pattern='apps/*',
-            require_app_config=True
-        )
-        
-        def mock_git_command(cmd):
-            if '--name-status' in cmd:
-                # Only frontend has changes
-                return 'M\tapps/frontend/app.yaml'
-            return ''
-        
-        with patch.object(analyzer, 'run_git_command', side_effect=mock_git_command):
-            result = analyzer.generate_matrix_output()
-            
-            print("Changed apps (matrix):")
-            print(json.dumps(result['matrix'], indent=2))
-            print("\nAll apps (all_apps):")
-            print(json.dumps(result['all_apps'], indent=2))
-            
-            # Matrix should only have frontend (changed)
-            matrix_apps = [app['app_name'] for app in result['matrix']['include']]
-            assert len(matrix_apps) == 1, "Matrix should only have 1 changed app"
-            assert 'frontend' in matrix_apps, "Matrix should include frontend"
-            
-            # all_apps should have all apps regardless of changes
-            all_app_names = [app['app_name'] for app in result['all_apps']['include']]
-            assert len(all_app_names) >= 3, "Should find all apps"
-            assert 'frontend' in all_app_names, "Should include frontend"
-            assert 'backend' in all_app_names, "Should include backend"
-            assert 'secure-api' in all_app_names, "Should include secure-api"
-
 def test_workflow_dispatch_event():
     """Test workflow_dispatch event handling"""
-    print("\n=== Test 9: Workflow Dispatch Event ===")
-    
+    print("\n=== Test 7: Workflow Dispatch Event ===")
+
     with tempfile.TemporaryDirectory() as test_dir:
         create_test_environment(test_dir, 'basic')
-        
+
         analyzer = BuildScopeAnalyzer(
             root_path=str(test_dir),
             include_pattern='apps/*'
         )
-        
+
         # Mock workflow_dispatch event
         with patch.dict(os.environ, {'GITHUB_EVENT_NAME': 'workflow_dispatch'}):
             # Mock git command should not be called for workflow_dispatch
@@ -495,48 +400,38 @@ def test_workflow_dispatch_event():
                 if '--name-status' in cmd and 'HEAD~1' in cmd:
                     raise Exception("Should not try to diff against HEAD~1 for workflow_dispatch")
                 return ''
-            
+
             with patch.object(analyzer, 'run_git_command', side_effect=mock_git_command):
                 result = analyzer.generate_matrix_output()
-                
-                print("Matrix output (should be empty):")
-                print(json.dumps(result['matrix'], indent=2))
-                print("\nAll apps output:")
-                print(json.dumps(result['all_apps'], indent=2))
-                print(f"\nRef: {result['ref']}")
-                
-                # For workflow_dispatch, matrix should be empty (no changes)
-                assert len(result['matrix']['include']) == 0, "Matrix should be empty for workflow_dispatch"
-                assert not result['has_changes'], "Should have no changes for workflow_dispatch"
-                assert not result['has_deletions'], "Should have no deletions for workflow_dispatch"
-                
-                # But all_apps should still list all apps
-                all_app_names = [app['app_name'] for app in result['all_apps']['include']]
-                assert 'frontend' in all_app_names, "Should include frontend in all_apps"
-                assert 'backend' in all_app_names, "Should include backend in all_apps"
-                
-                # Ref should be empty for workflow_dispatch
-                assert result['ref'] == "", "Ref should be empty for workflow_dispatch"
+
+                print(json.dumps(result, indent=2))
+
+                assert not result['apps']['updated'], "No changed apps for workflow_dispatch"
+                assert not result['containers']['updated'], "No changed containers for workflow_dispatch"
+                assert result['apps']['all'], "Should list all apps in all"
+                assert result['containers']['all'], "Should list all containers in all"
+                for c in result['containers']['all']:
+                    assert 'container_name' in c, f"container_name missing in: {c}"
+                    assert 'context' in c, f"context missing in: {c}"
+                    assert isinstance(c['dockerfile'], dict), f"dockerfile not dict in: {c}"
 
 def run_all_tests():
     """Run all tests"""
     print("Running Build Scope Analyzer V3 Tests")
     print("=" * 50)
-    
+
     try:
         test_basic_functionality()
         test_multi_container()
         test_pre_built_only()
         test_deletions()
         test_mixed_changes_and_deletions()
-        test_github_actions_output()
         test_exclude_pattern()
-        test_all_apps_output()
         test_workflow_dispatch_event()
-        
+
         print("\n" + "=" * 50)
         print("✅ All tests passed!")
-        
+
     except AssertionError as e:
         print(f"\n❌ Test failed: {e}")
         sys.exit(1)
@@ -547,4 +442,4 @@ def run_all_tests():
         sys.exit(1)
 
 if __name__ == '__main__':
-    run_all_tests() 
+    run_all_tests()

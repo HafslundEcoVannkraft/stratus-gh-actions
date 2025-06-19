@@ -195,11 +195,21 @@ class BuildScopeAnalyzer:
                 # Since the folder is gone, we need to infer from deleted files
                 for dockerfile in deleted_items['dockerfiles']:
                     dockerfile_name = dockerfile.name
+                    # Create a dockerfile dict similar to what other methods use
+                    dockerfile_dict = {'name': dockerfile_name}
                     if dockerfile_name == 'Dockerfile':
-                        container_name = app_name
+                        dockerfile_dict['suffix'] = ''
                     else:
-                        suffix = dockerfile_name.replace('Dockerfile.', '')
-                        container_name = f"{app_name}-{suffix}"
+                        dockerfile_dict['suffix'] = dockerfile_name.replace('Dockerfile.', '')
+
+                    # Try to find app.yaml/app.yml in the deleted files to get app name
+                    app_config_path = None
+                    for app_config in deleted_items['app_configs']:
+                        app_config_path = str(app_config)
+                        break
+
+                    # Use our standard method for consistent container naming
+                    container_name = self.get_container_name(app_name, dockerfile_dict, app_config_path)
 
                     deletions['containers'].append({
                         'app_name': app_name,
@@ -219,11 +229,27 @@ class BuildScopeAnalyzer:
                 # Track deleted containers (Dockerfiles)
                 for dockerfile in deleted_items['dockerfiles']:
                     dockerfile_name = dockerfile.name
+                    # Create a dockerfile dict similar to what other methods use
+                    dockerfile_dict = {'name': dockerfile_name}
                     if dockerfile_name == 'Dockerfile':
-                        container_name = app_name
+                        dockerfile_dict['suffix'] = ''
                     else:
-                        suffix = dockerfile_name.replace('Dockerfile.', '')
-                        container_name = f"{app_name}-{suffix}"
+                        dockerfile_dict['suffix'] = dockerfile_name.replace('Dockerfile.', '')
+
+                    # Find app.yaml or app.yml in the deleted files
+                    app_config_path = None
+                    for app_config in deleted_items['app_configs']:
+                        app_config_path = str(app_config)
+                        break
+
+                    # If the folder wasn't deleted, check if app.yaml/app.yml still exists
+                    if not app_config_path:
+                        potential_app_yaml = self.find_app_yaml(folder_path)
+                        if potential_app_yaml:
+                            app_config_path = potential_app_yaml
+
+                    # Use our standard method for consistent container naming
+                    container_name = self.get_container_name(app_name, dockerfile_dict, app_config_path)
 
                     deletions['containers'].append({
                         'app_name': app_name,
@@ -387,10 +413,9 @@ class BuildScopeAnalyzer:
 
             # Handle Dockerfiles (containers matrix)
             if app_info['dockerfiles'] and len(app_info['dockerfiles']) > 0:
-                image_base = self.get_app_name_from_yaml(app_info['app_config']) or app_info['app_name']
                 for dockerfile in app_info['dockerfiles']:
                     if self.folder_has_changes(folder_path, changed_files) and not is_only_renamed(folder_path):
-                        container_name = self.get_container_name(app_info['app_name'], dockerfile)
+                        container_name = self.get_container_name(app_info['app_name'], dockerfile, app_info['app_config'])
                         context = self.get_dockerfile_context(dockerfile['path'], app_info['path'])
                         suffix = dockerfile.get('suffix', '')
                         container_item = {
@@ -418,9 +443,8 @@ class BuildScopeAnalyzer:
                 }
                 all_apps.append(app_item)
             if app.get('dockerfiles') and len(app['dockerfiles']) > 0:
-                image_base = self.get_app_name_from_yaml(app.get('app_config')) or app['app_name']
                 for dockerfile in app['dockerfiles']:
-                    container_name = self.get_container_name(app['app_name'], dockerfile)
+                    container_name = self.get_container_name(app['app_name'], dockerfile, app.get('app_config'))
                     context = self.get_dockerfile_context(dockerfile['path'], app['path'])
                     suffix = dockerfile.get('suffix', '')
                     container_item = {
@@ -496,9 +520,13 @@ class BuildScopeAnalyzer:
             pass
         return default_context
 
-    def get_container_name(self, app_name: str, dockerfile: Dict[str, str]) -> str:
+    def get_container_name(self, app_name: str, dockerfile: Dict[str, str], app_config: Optional[str] = None) -> str:
+        # Try to get name from app.yaml/app.yml first if available
+        base_name = self.get_app_name_from_yaml(app_config) or app_name
         suffix = dockerfile.get('suffix', '')
-        return app_name if not suffix else f"{app_name}-{suffix}"
+        container_name = base_name if not suffix else f"{base_name}-{suffix}"
+        # Ensure container name is lowercase for Azure Container Registry compatibility
+        return container_name.lower()
 
 
 def main():

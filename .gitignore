@@ -213,3 +213,6 @@ terraform.rc
 
 # Terraform plan output files
 *tfplan*
+
+# Ignore local _temp folders
+**/_temp/

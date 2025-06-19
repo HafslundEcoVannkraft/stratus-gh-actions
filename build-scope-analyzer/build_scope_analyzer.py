@@ -42,33 +42,50 @@ class BuildScopeAnalyzer:
         """Get GitHub event type from environment"""
         return os.environ.get('GITHUB_EVENT_NAME', 'push')
 
-    def get_comparison_ref(self) -> str:
-        """Determine the reference to compare against"""
+    def get_comparison_ref(self) -> Tuple[str, Optional[str]]:
+        """Determine the reference to compare against and resolve its commit SHA
+
+        Returns:
+            Tuple containing:
+                - ref_name: String with the reference name (e.g., "HEAD~1", "origin/main")
+                - commit_sha: String with the resolved commit SHA, or None if no ref
+        """
         event_type = self.get_event_type()
 
         if event_type == 'pull_request':
             # For PRs, compare against the base branch
             base_ref = os.environ.get('GITHUB_BASE_REF', 'main')
-            return f"origin/{base_ref}"
+            ref_name = f"origin/{base_ref}"
+            try:
+                # Resolve the commit SHA
+                commit_sha = self.run_git_command(['git', 'rev-parse', ref_name])
+                return ref_name, commit_sha
+            except:
+                return ref_name, None
         elif event_type == 'workflow_dispatch':
             # For workflow_dispatch, we don't need to compare against anything
             # since we'll use all_apps output anyway
-            # Return empty string to indicate no comparison needed
-            return ""
+            return "", None
         else:
             # For push events, compare against previous commit
-            return "HEAD~1"
+            ref_name = "HEAD~1"
+            try:
+                # Resolve the commit SHA
+                commit_sha = self.run_git_command(['git', 'rev-parse', ref_name])
+                return ref_name, commit_sha
+            except:
+                return ref_name, None
 
     def get_changed_files(self) -> Tuple[Set[Path], Set[Path], Dict[Path, Path]]:
         """Get list of changed, deleted, and renamed files from git diff"""
-        ref = self.get_comparison_ref()
+        ref_name, commit_sha = self.get_comparison_ref()
 
         # If ref is empty (workflow_dispatch), return empty sets
-        if not ref:
+        if not ref_name:
             return set(), set(), {}
 
         # Get all changes with status
-        diff_output = self.run_git_command(['git', 'diff', '--name-status', ref])
+        diff_output = self.run_git_command(['git', 'diff', '--name-status', ref_name])
 
         changed = set()
         deleted = set()
@@ -185,10 +202,17 @@ class BuildScopeAnalyzer:
             # Check if the folder itself was deleted
             if not (self.root_path / folder_path).exists():
                 # Folder was deleted - add to deleted_apps
+                # For consistent structure with apps.all and apps.updated, construct the expected app.yaml path
+                yaml_path = str(folder_path / 'app.yaml')  # Default to app.yaml path
+                # Check if we had app.yaml or app.yml in the deleted files
+                for app_config in deleted_items['app_configs']:
+                    yaml_path = str(app_config)
+                    break
+
                 deletions['apps'].append({
                     'path': str(folder_path),
                     'app_name': app_name,
-                    'deleted_config': 'folder_deleted'
+                    'app_config': yaml_path
                 })
 
                 # Also need to determine what containers were in this folder
@@ -223,7 +247,7 @@ class BuildScopeAnalyzer:
                     deletions['apps'].append({
                         'path': str(folder_path),
                         'app_name': app_name,
-                        'deleted_config': str(deleted_items['app_configs'][0])
+                        'app_config': str(deleted_items['app_configs'][0])  # Consistent with apps.all and apps.updated
                     })
 
                 # Track deleted containers (Dockerfiles)
@@ -300,13 +324,17 @@ class BuildScopeAnalyzer:
             if app_info:
                 apps[folder] = app_info
 
+        # Get comparison ref and commit SHA
+        ref_name, commit_sha = self.get_comparison_ref()
+
         # Analyze deletions
         deletions = self.analyze_deletions()
 
         return {
             'apps': apps,
             'deletions': deletions,
-            'ref': self.get_comparison_ref()
+            'ref': ref_name,
+            'commit_sha': commit_sha
         }
 
     def analyze_all_builds(self) -> List[Dict]:
@@ -396,7 +424,7 @@ class BuildScopeAnalyzer:
             return True if renamed_files else False
 
         # Process changed apps
-        app_items = []  # Folders with app.yaml/app.yml
+        updated_apps = []  # Folders with app.yaml/app.yml
         container_items = []  # Folders with Dockerfiles
 
         for folder, app_info in analysis['apps'].items():
@@ -409,7 +437,7 @@ class BuildScopeAnalyzer:
                         'app_name': app_info['app_name'],
                         'app_config': app_info['app_config']
                     }
-                    app_items.append(app_item)
+                    updated_apps.append(app_item)
 
             # Handle Dockerfiles (containers matrix)
             if app_info['dockerfiles'] and len(app_info['dockerfiles']) > 0:
@@ -457,17 +485,33 @@ class BuildScopeAnalyzer:
                     all_containers.append(container_item)
 
         # Check if there are updated or deleted apps/containers
-        has_app_updates = len(app_items) > 0
+        has_app_updates = len(updated_apps) > 0
         has_app_deletions = len(analysis['deletions']['apps']) > 0
         has_container_updates = len(container_items) > 0
         has_container_deletions = len(analysis['deletions']['containers']) > 0
 
+        # Get the commit SHA for deleted items
+        commit_sha = analysis.get('commit_sha')
+
+        # Add commit SHA to each deleted app and container if available
+        deleted_apps = analysis['deletions']['apps']
+        deleted_containers = analysis['deletions']['containers']
+
+        if commit_sha:
+            # Add to deleted apps
+            for app in deleted_apps:
+                app['commit_sha'] = commit_sha
+
+            # Add to deleted containers
+            for container in deleted_containers:
+                container['commit_sha'] = commit_sha
+
         # Create the clean, focused return object
         return {
             'apps': {
-                'updated': app_items,  # Folders with app.yaml/app.yml that changed
+                'updated': updated_apps,  # Folders with app.yaml/app.yml that changed
                 'all': all_apps,       # All folders with app.yaml/app.yml
-                'deleted': analysis['deletions']['apps'],  # Deleted app.yaml/app.yml files
+                'deleted': deleted_apps,  # Deleted app.yaml/app.yml files
                 'has_updates': has_app_updates,
                 'has_deletions': has_app_deletions
             },

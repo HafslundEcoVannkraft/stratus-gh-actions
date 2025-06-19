@@ -72,7 +72,7 @@ The output structure provides specialized outputs for different use cases:
 ```
 
 - `context`: The build context directory for the Docker build. If a Dockerfile contains a `# @context: ...` comment, this value will reflect the custom context.
-- `container_name`: The name of the container (from app config or derived from Dockerfile suffix).
+- `container_name`: The name of the container (from app.yaml name property or folder basename if no app.yaml, suffixed with Dockerfile suffix).
 
 ### Deleted Container Structure
 
@@ -82,83 +82,128 @@ The output structure provides specialized outputs for different use cases:
   "container_name": "old-service-monitor",
   "dockerfile": "apps/old-service/Dockerfile.monitor",
   "image_name": "old-service-monitor",
-  "context": "apps/old-service" // (if available)
+  "context": "apps/old-service", // (if available)
+  "commit_sha": "abc123def456789test0commit0sha0for0testing" // The commit SHA for the version with this container
 }
 ```
 
-## Pipeline Example
+### Deleted App Structure
+
+```json
+{
+  "path": "apps/old-service",
+  "app_name": "old-service",
+  "app_config": "apps/old-service/app.yaml",
+  "commit_sha": "abc123def456789test0commit0sha0for0testing" // The commit SHA for the version with this app
+}
+```
+
+## Production Pipeline Example
 
 ```yaml
+# This example is based on a real-world production workflow
 jobs:
-  analyze-changes:
-    # ...analyzer job here...
+  analyze:
+    name: Analyze Repo Changes
+    runs-on: ubuntu-latest
+    outputs:
+      apps_updated: ${{ steps.set-matrix.outputs.apps_updated }}
+      apps_deleted: ${{ steps.set-matrix.outputs.apps_deleted }}
+      apps_has_deletions: ${{ steps.set-matrix.outputs.apps_has_deletions }}
+      containers_updated: ${{ steps.set-matrix.outputs.containers_updated }}
+      containers_deleted: ${{ steps.set-matrix.outputs.containers_deleted }}
+      containers_has_deletions: ${{ steps.set-matrix.outputs.containers_has_deletions }}
+      comparison_ref: ${{ steps.set-matrix.outputs.ref }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-  cleanup-apps:
-    name: Clean up Deleted Apps
-    needs: analyze-changes
-    if: fromJson(needs.analyze-changes.outputs.matrix).apps.has_deletions == true
+      - name: Run build-scope-analyzer
+        id: analyze
+        uses: HafslundEcoVannkraft/stratus-gh-actions/build-scope-analyzer@v3
+        with:
+          root-path: ${{ github.workspace }}
+          include-pattern: "src/*"
+
+      - name: Set matrix outputs
+        id: set-matrix
+        run: |
+          MATRIX_JSON='${{ steps.analyze.outputs.matrix }}'
+          echo "apps_updated=$(echo $MATRIX_JSON | jq -c '.apps.updated')" >> $GITHUB_OUTPUT
+          echo "apps_deleted=$(echo $MATRIX_JSON | jq -c '.apps.deleted')" >> $GITHUB_OUTPUT
+          echo "apps_has_deletions=$(echo $MATRIX_JSON | jq -r '.apps.has_deletions')" >> $GITHUB_OUTPUT
+          echo "containers_updated=$(echo $MATRIX_JSON | jq -c '.containers.updated')" >> $GITHUB_OUTPUT
+          echo "containers_deleted=$(echo $MATRIX_JSON | jq -c '.containers.deleted')" >> $GITHUB_OUTPUT
+          echo "containers_has_deletions=$(echo $MATRIX_JSON | jq -r '.containers.has_deletions')" >> $GITHUB_OUTPUT
+          echo "ref=$(echo $MATRIX_JSON | jq -c '.ref')" >> $GITHUB_OUTPUT
+
+  app-destroy:
+    name: Destroy App (${{ matrix.app.app_name }})
+    needs: [analyze]
+    if: needs.analyze.outputs.apps_has_deletions == 'true'
     strategy:
       matrix:
-        app: ${{ fromJson(needs.analyze-changes.outputs.matrix).apps.deleted }}
+        app: ${{ fromJson(needs.analyze.outputs.apps_deleted) }}
     steps:
-      - name: Remove App
+      - name: Destroy App
         run: |
-          echo "Removing app ${{ matrix.app.app_name }} from ${{ matrix.app.path }}"
+          echo "Destroying app: ${{ matrix.app.app_name }}"
+          echo "Path: ${{ matrix.app.path }}"
+          echo "App config: ${{ matrix.app.app_config }}"
+          echo "Commit SHA: ${{ matrix.app.commit_sha }}"
+          # Destroy app logic here
 
-  cleanup-containers:
-    name: Clean up Deleted Containers
-    needs: analyze-changes
-    if: fromJson(needs.analyze-changes.outputs.matrix).containers.has_deletions == true
+  docker-cleanup:
+    name: Docker Cleanup (${{ matrix.container.container_name }})
+    needs: [analyze]
+    if: needs.analyze.outputs.containers_has_deletions == 'true'
     strategy:
       matrix:
-        container: ${{ fromJson(needs.analyze-changes.outputs.matrix).containers.deleted }}
+        container: ${{ fromJson(needs.analyze.outputs.containers_deleted) }}
+      max-parallel: 50
     steps:
-      - name: Remove Container
+      - name: Delete from Container Registry
         run: |
-          echo "Removing container ${{ matrix.container.container_name }} (image: ${{ matrix.container.image_name }})"
+          echo "Deleting container: ${{ matrix.container.container_name }}"
+          echo "From app: ${{ matrix.container.app_name }}"
           echo "Dockerfile: ${{ matrix.container.dockerfile }}"
-          echo "Context: ${{ matrix.container.context }}"
+          echo "Commit SHA: ${{ matrix.container.commit_sha }}"
+          # Container registry cleanup logic here
 
-  build-containers:
-    name: Build Updated Containers
-    needs: [analyze-changes, cleanup-containers]
-    if: |
-      always() && (
-        fromJson(needs.analyze-changes.outputs.matrix).containers.has_updates == true ||
-        github.event_name == 'workflow_dispatch'
-      )
+  container-build:
+    name: Docker Build (${{ matrix.container.container_name }})
+    needs: [analyze, docker-cleanup]
+    if: always() && needs.analyze.outputs.containers_updated != '[]' && (needs.docker-cleanup.result == 'success' || needs.docker-cleanup.result == 'skipped')
     strategy:
       matrix:
-        include: ${{ github.event_name == 'workflow_dispatch'
-                    ? fromJson(needs.analyze-changes.outputs.matrix).containers.all
-                    : fromJson(needs.analyze-changes.outputs.matrix).containers.updated }}
+        container: ${{ fromJson(needs.analyze.outputs.containers_updated) }}
+      max-parallel: 50
     steps:
       - name: Build Container
         run: |
-          echo "Building container for ${{ matrix.container.app_name }}"
-          echo "Image name: ${{ matrix.container.image_name }}"
-          echo "Container name: ${{ matrix.container.container_name }}"
-          echo "Dockerfile: ${{ matrix.container.dockerfile.path }}"
+          echo "Building container: ${{ matrix.container.container_name }}"
+          echo "For app: ${{ matrix.container.app_name }}"
           echo "Context: ${{ matrix.container.context }}"
-          # docker build -f ${{ matrix.container.dockerfile.path }} -t ${{ matrix.container.image_name }} ${{ matrix.container.context }}
+          echo "Dockerfile: ${{ matrix.container.dockerfile.path }}"
+          # docker build -f ${{ matrix.container.dockerfile.path }} -t ${{ matrix.container.container_name }} ${{ matrix.container.context }}
 
-  deploy-apps:
-    name: Deploy Updated Apps
-    needs: [analyze-changes, cleanup-apps, build-containers]
-    if: |
-      always() && (
-        fromJson(needs.analyze-changes.outputs.matrix).apps.has_updates == true ||
-        github.event_name == 'workflow_dispatch'
-      )
+  app-deploy:
+    name: Deploy App (${{ matrix.app.app_name }})
+    needs: [analyze, app-destroy, container-build]
+    if: always() && needs.analyze.outputs.apps_updated != '[]' && (needs.container-build.result == 'success' || needs.container-build.result == 'skipped') && (needs.app-destroy.result == 'success' || needs.app-destroy.result == 'skipped')
     strategy:
       matrix:
-        include: ${{ github.event_name == 'workflow_dispatch'
-                    ? fromJson(needs.analyze-changes.outputs.matrix).apps.all
-                    : fromJson(needs.analyze-changes.outputs.matrix).apps.updated }}
+        app: ${{ fromJson(needs.analyze.outputs.apps_updated) }}
+      max-parallel: 50
     steps:
       - name: Deploy App
         run: |
-          echo "Deploying app ${{ matrix.app_name }} from ${{ matrix.path }}"
+          echo "Deploying app: ${{ matrix.app.app_name }}"
+          echo "From path: ${{ matrix.app.path }}"
+          echo "Using config: ${{ matrix.app.app_config }}"
+          # Deployment logic here
 ```
 
 ## Notes

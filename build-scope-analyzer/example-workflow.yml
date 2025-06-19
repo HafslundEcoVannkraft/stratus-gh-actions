@@ -94,7 +94,8 @@ jobs:
         run: |
           echo "Destroying app: ${{ matrix.app.app_name }}"
           echo "Path: ${{ matrix.app.path }}"
-          echo "Deletion reason: ${{ matrix.app.deleted_config }}"
+          echo "App config: ${{ matrix.app.app_config }}"
+          echo "Commit SHA: ${{ matrix.app.commit_sha }}"
           # Add your cleanup logic here
 
   cleanup-deleted-containers:
@@ -112,6 +113,7 @@ jobs:
           echo "From app: ${{ matrix.container.app_name }}"
           echo "Context: ${{ matrix.container.context }}"
           echo "Original Dockerfile: ${{ matrix.container.dockerfile }}"
+          echo "Commit SHA: ${{ matrix.container.commit_sha }}"
           # Add your ACR cleanup logic here
 
   summary:

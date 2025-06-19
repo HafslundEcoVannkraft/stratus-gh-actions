@@ -166,6 +166,9 @@ def test_basic_functionality():
         def mock_git_command(cmd):
             if '--name-status' in cmd:
                 return 'M\tapps/frontend/app.yaml\nM\tapps/backend/Dockerfile'
+            # Mock the commit SHA resolution
+            if 'rev-parse' in cmd:
+                return 'abc123def456789test0commit0sha0for0testing'
             return ''
 
         with patch.object(analyzer, 'run_git_command', side_effect=mock_git_command):
@@ -200,6 +203,9 @@ def test_multi_container():
         def mock_git_command(cmd):
             if '--name-status' in cmd:
                 return 'A\tapps/secure-api/Dockerfile.logger'
+            # Mock the commit SHA resolution
+            if 'rev-parse' in cmd:
+                return 'abc123def456789test0commit0sha0for0testing'
             return ''
 
         with patch.object(analyzer, 'run_git_command', side_effect=mock_git_command):
@@ -236,6 +242,9 @@ def test_pre_built_only():
         def mock_git_command(cmd):
             if '--name-status' in cmd:
                 return 'M\tapps/monitoring/app.yaml'
+            # Mock the commit SHA resolution
+            if 'rev-parse' in cmd:
+                return 'abc123def456789test0commit0sha0for0testing'
             return ''
 
         with patch.object(analyzer, 'run_git_command', side_effect=mock_git_command):
@@ -263,6 +272,9 @@ def test_deletions():
         def mock_git_deleted_dockerfile(cmd):
             if '--name-status' in cmd:
                 return 'D\tapps/payment-service/Dockerfile.monitor\nM\tapps/payment-service/app.yaml'
+            # Mock the commit SHA resolution
+            if 'rev-parse' in cmd:
+                return 'abc123def456789test0commit0sha0for0testing'
             return ''
 
         with patch.object(analyzer, 'run_git_command', side_effect=mock_git_deleted_dockerfile):
@@ -271,17 +283,32 @@ def test_deletions():
             print(json.dumps(result, indent=2))
 
             deleted = result['containers']['deleted']
-            assert any(c['container_name'] == 'payment-service-monitor' for c in deleted), "Should cleanup deleted container image for Dockerfile.monitor"
+            found_container = None
+            for c in deleted:
+                if c['container_name'] == 'payment-service-monitor':
+                    found_container = c
+                    break
+
+            assert found_container is not None, "Should cleanup deleted container image for Dockerfile.monitor"
             # Assert deleted container structure
             for c in deleted:
                 assert 'container_name' in c, f"container_name missing in: {c}"
                 assert 'dockerfile' in c, f"dockerfile missing in: {c}"
+                # Check for commit_sha field in deleted containers
+                assert 'commit_sha' in c, f"commit_sha missing in: {c}"
+                assert c['commit_sha'] == 'abc123def456789test0commit0sha0for0testing', "commit_sha should match the mocked value"
+                # Check for commit_sha field in deleted containers
+                assert 'commit_sha' in c, f"commit_sha missing in: {c}"
+                assert c['commit_sha'] == 'abc123def456789test0commit0sha0for0testing', "commit_sha should match the mocked value"
 
         # Test 4b: Deleted app.yaml
         print("\n--- Test 4b: Deleted app.yaml ---")
         def mock_git_deleted_app_yaml(cmd):
             if '--name-status' in cmd:
                 return 'D\tapps/legacy-service/app.yaml'
+            # Mock the commit SHA resolution
+            if 'rev-parse' in cmd:
+                return 'abc123def456789test0commit0sha0for0testing'
             return ''
 
         with patch.object(analyzer, 'run_git_command', side_effect=mock_git_deleted_app_yaml):
@@ -293,13 +320,33 @@ def test_deletions():
             print(json.dumps(result, indent=2))
 
             deleted = result['apps']['deleted']
-            assert any(a['app_name'] == 'legacy-service' for a in deleted), "Should cleanup deleted app when app.yaml is deleted"
+            deleted_app = None
+            for app in deleted:
+                if app['app_name'] == 'legacy-service':
+                    deleted_app = app
+                    break
+
+            assert deleted_app is not None, "Should cleanup deleted app when app.yaml is deleted"
+            # Check for app_config field instead of deleted_config
+            assert 'app_config' in deleted_app, "app_config field should be present"
+            assert deleted_app['app_config'].endswith('app.yaml'), "app_config should end with app.yaml"
+            # Check for commit_sha field
+            assert 'commit_sha' in deleted_app, "commit_sha field should be present"
+            assert deleted_app['commit_sha'] == 'abc123def456789test0commit0sha0for0testing', "commit_sha should match the mocked value"
+            # Check for app_config field instead of deleted_config
+            assert 'app_config' in deleted_app, "app_config field should be present"
+            assert deleted_app['app_config'].endswith('app.yaml'), "app_config should end with app.yaml"
+            # Check for commit_sha field
+            assert 'commit_sha' in deleted_app, "commit_sha field should be present"
 
         # Test 4c: Entire folder deleted
         print("\n--- Test 4c: Entire Folder Deleted ---")
         def mock_git_deleted_folder(cmd):
             if '--name-status' in cmd:
                 return 'D\tapps/deprecated-service/app.yaml\nD\tapps/deprecated-service/Dockerfile'
+            # Mock the commit SHA resolution
+            if 'rev-parse' in cmd:
+                return 'abc123def456789test0commit0sha0for0testing'
             return ''
 
         with patch.object(analyzer, 'run_git_command', side_effect=mock_git_deleted_folder):
@@ -310,11 +357,36 @@ def test_deletions():
 
             print(json.dumps(result, indent=2))
 
-            assert any(a['app_name'] == 'deprecated-service' for a in result['apps']['deleted']), "Should cleanup deleted app for folder deletion"
+            # Find the deleted app
+            deleted_app = None
+            for app in result['apps']['deleted']:
+                if app['app_name'] == 'deprecated-service':
+                    deleted_app = app
+                    break
+
+            assert deleted_app is not None, "Should cleanup deleted app for folder deletion"
+            # Check for app_config field instead of deleted_config
+            assert 'app_config' in deleted_app, "app_config field should be present"
+            assert deleted_app['app_config'].endswith('app.yaml'), "app_config should end with app.yaml"
+            # Check for commit_sha field
+            assert 'commit_sha' in deleted_app, "commit_sha field should be present"
+            assert deleted_app['commit_sha'] == 'abc123def456789test0commit0sha0for0testing', "commit_sha should match the mocked value"
+            # Check for app_config field instead of deleted_config
+            assert 'app_config' in deleted_app, "app_config field should be present"
+            assert deleted_app['app_config'].endswith('app.yaml'), "app_config should end with app.yaml"
+            # Check for commit_sha field
+            assert 'commit_sha' in deleted_app, "commit_sha field should be present"
+
+            # Check deleted containers
             deleted_containers = result['containers']['deleted']
             for c in deleted_containers:
                 assert 'container_name' in c, f"container_name missing in: {c}"
                 assert 'dockerfile' in c, f"dockerfile missing in: {c}"
+                # Check for commit_sha field in deleted containers
+                assert 'commit_sha' in c, f"commit_sha missing in: {c}"
+                assert c['commit_sha'] == 'abc123def456789test0commit0sha0for0testing', "commit_sha should match the mocked value"
+                # Check for commit_sha field in deleted containers
+                assert 'commit_sha' in c, f"commit_sha missing in: {c}"
 
 def test_mixed_changes_and_deletions():
     """Test scenario with both changes and deletions"""
@@ -333,6 +405,9 @@ def test_mixed_changes_and_deletions():
         def mock_git_mixed(cmd):
             if '--name-status' in cmd:
                 return 'M\tapps/frontend/app.yaml\nA\tapps/secure-api/Dockerfile.logger\nD\tapps/backend/Dockerfile.cache\nD\tapps/old-service/app.yaml\nD\tapps/old-service/Dockerfile'
+            # Mock the commit SHA resolution
+            if 'rev-parse' in cmd:
+                return 'abc123def456789test0commit0sha0for0testing'
             return ''
 
         with patch.object(analyzer, 'run_git_command', side_effect=mock_git_mixed):
@@ -343,11 +418,28 @@ def test_mixed_changes_and_deletions():
             assert any(a['app_name'] == 'frontend' for a in result['apps']['updated']), "Should detect frontend as changed app"
             assert any(c['dockerfile']['name'] == 'Dockerfile.logger' for c in result['containers']['updated']), "Should detect Dockerfile.logger as new container"
             assert any(c['container_name'] == 'backend-cache' for c in result['containers']['deleted']), "Should cleanup deleted backend-cache container"
-            assert any(a['app_name'] == 'old-service' for a in result['apps']['deleted']), "Should cleanup deleted old-service app"
-            # Assert deleted container structure
+
+            # Verify deleted app structure
+            deleted_app = None
+            for app in result['apps']['deleted']:
+                if app['app_name'] == 'old-service':
+                    deleted_app = app
+                    break
+
+            assert deleted_app is not None, "Should detect old-service as deleted app"
+            # Check for app_config field instead of deleted_config
+            assert 'app_config' in deleted_app, "app_config field should be present"
+            assert deleted_app['app_config'].endswith('app.yaml'), "app_config should end with app.yaml"
+            # Check for commit_sha field
+            assert 'commit_sha' in deleted_app, "commit_sha field should be present"
+            assert deleted_app['commit_sha'] == 'abc123def456789test0commit0sha0for0testing', "commit_sha should match the mocked value"
+
+            # Check for commit_sha in deleted containers
             for c in result['containers']['deleted']:
                 assert 'container_name' in c, f"container_name missing in: {c}"
                 assert 'dockerfile' in c, f"dockerfile missing in: {c}"
+                assert 'commit_sha' in c, f"commit_sha missing in deleted container: {c}"
+                assert c['commit_sha'] == 'abc123def456789test0commit0sha0for0testing', "commit_sha should match the mocked value"
 
 def test_exclude_pattern():
     """Test exclude pattern functionality"""
@@ -370,6 +462,9 @@ def test_exclude_pattern():
         def mock_git_command(cmd):
             if '--name-status' in cmd:
                 return 'M\tapps/frontend/app.yaml\nM\tapps/test-app/Dockerfile'
+            # Mock the commit SHA resolution
+            if 'rev-parse' in cmd:
+                return 'abc123def456789test0commit0sha0for0testing'
             return ''
 
         with patch.object(analyzer, 'run_git_command', side_effect=mock_git_command):
@@ -399,6 +494,9 @@ def test_workflow_dispatch_event():
             def mock_git_command(cmd):
                 if '--name-status' in cmd and 'HEAD~1' in cmd:
                     raise Exception("Should not try to diff against HEAD~1 for workflow_dispatch")
+                # Mock the commit SHA resolution if needed
+                if 'rev-parse' in cmd:
+                    return 'abc123def456789test0commit0sha0for0testing'
                 return ''
 
             with patch.object(analyzer, 'run_git_command', side_effect=mock_git_command):

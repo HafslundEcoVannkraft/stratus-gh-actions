@@ -287,7 +287,8 @@ apps/
       {
         "path": "apps/legacy-service",
         "app_name": "legacy-service",
-        "deleted_config": "apps/legacy-service/app.yaml"
+        "app_config": "apps/legacy-service/app.yaml",
+        "commit_sha": "abc123def456789test0commit0sha0for0testing"
       }
     ],
     "has_updates": false,
@@ -328,7 +329,12 @@ apps/
     "updated": [],
     "all": [],
     "deleted": [
-      { "path": "apps/old-service", "app_name": "old-service", "deleted_config": "folder_deleted" }
+      {
+        "path": "apps/old-service",
+        "app_name": "old-service",
+        "app_config": "apps/old-service/app.yaml",
+        "commit_sha": "abc123def456789test0commit0sha0for0testing"
+      }
     ],
     "has_updates": false,
     "has_deletions": true
@@ -428,7 +434,12 @@ apps/
       }
     ],
     "deleted": [
-      { "path": "apps/deprecated", "app_name": "deprecated", "deleted_config": "folder_deleted" }
+      {
+        "path": "apps/deprecated",
+        "app_name": "deprecated",
+        "app_config": "apps/deprecated/app.yaml",
+        "commit_sha": "abc123def456789test0commit0sha0for0testing"
+      }
     ],
     "has_updates": true,
     "has_deletions": true
@@ -679,7 +690,8 @@ jobs:
         run: |
           echo "Destroying app: ${{ matrix.app.app_name }}"
           echo "Path: ${{ matrix.app.path }}"
-          echo "Deletion reason: ${{ matrix.app.deleted_config }}"
+          echo "App config: ${{ matrix.app.app_config }}"
+          echo "Commit SHA: ${{ matrix.app.commit_sha }}"
 ```
 
 ### Cleaning Up Deleted Container Images
@@ -790,9 +802,22 @@ interface ContainerItem {
 
 ```typescript
 interface DeletedContainer {
+  app_name: string; // App name
   container_name: string; // Container name
   context: string; // Docker build context
   dockerfile: string; // Path to Dockerfile
+  commit_sha: string; // Commit SHA of the version with this container
+}
+```
+
+### Deleted App Structure
+
+```typescript
+interface DeletedApp {
+  path: string; // Relative path to app folder
+  app_name: string; // App name
+  app_config: string; // Path to app.yaml/app.yml
+  commit_sha: string; // Commit SHA of the version with this app
 }
 ```
 

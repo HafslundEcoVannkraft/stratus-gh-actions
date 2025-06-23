@@ -37,14 +37,62 @@ runs:
       run: |
         set -e
 
-        # Get the latest tag
-        latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-        echo "Latest tag: $latest_tag"
+        # Get all tags and find the latest semantic version
+        echo "Fetching all tags to determine latest version..."
+        all_tags=$(git tag -l "v*")
 
-        # Extract version numbers
-        major=$(echo $latest_tag | sed 's/v//' | cut -d. -f1)
-        minor=$(echo $latest_tag | cut -d. -f2)
-        patch=$(echo $latest_tag | cut -d. -f3 | cut -d- -f1)
+        # Initialize with default
+        latest_tag="v0.0.0"
+        latest_major=0
+        latest_minor=0
+        latest_patch=0
+
+        # Process all tags to find the latest semantic version
+        for tag in $all_tags; do
+          # Skip 'latest' tag
+          if [[ "$tag" == "latest" ]]; then
+            continue
+          fi
+
+          # Extract version components with validation
+          if [[ "$tag" =~ ^v([0-9]+)$ ]]; then
+            # Major version only (v1, v2, etc.)
+            tag_major="${BASH_REMATCH[1]}"
+            tag_minor=0
+            tag_patch=0
+          elif [[ "$tag" =~ ^v([0-9]+)\.([0-9]+)$ ]]; then
+            # Major.Minor version (v1.2, v2.0, etc.)
+            tag_major="${BASH_REMATCH[1]}"
+            tag_minor="${BASH_REMATCH[2]}"
+            tag_patch=0
+          elif [[ "$tag" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+).*$ ]]; then
+            # Full semantic version (v1.2.3, v2.0.1-beta, etc.)
+            tag_major="${BASH_REMATCH[1]}"
+            tag_minor="${BASH_REMATCH[2]}"
+            tag_patch="${BASH_REMATCH[3]}"
+          else
+            # Tag doesn't match expected format, skip it
+            echo "Skipping tag with non-semantic format: $tag"
+            continue
+          fi
+
+          # Compare versions and update if this one is newer
+          if [[ "$tag_major" -gt "$latest_major" ]] ||
+             [[ "$tag_major" -eq "$latest_major" && "$tag_minor" -gt "$latest_minor" ]] ||
+             [[ "$tag_major" -eq "$latest_major" && "$tag_minor" -eq "$latest_minor" && "$tag_patch" -gt "$latest_patch" ]]; then
+            latest_tag="$tag"
+            latest_major="$tag_major"
+            latest_minor="$tag_minor"
+            latest_patch="$tag_patch"
+          fi
+        done
+
+        echo "Latest semantic version tag: $latest_tag"
+
+        # Set variables for version calculation
+        major="$latest_major"
+        minor="$latest_minor"
+        patch="$latest_patch"
 
         # Get PR labels for pull request events
         if [[ "${{ github.event_name }}" == "pull_request" ]]; then
@@ -111,8 +159,8 @@ runs:
 
         # Force update the major version tag to point to the current commit
         if [[ "${{ steps.version.outputs.major }}" -gt 0 ]]; then
-          # Extract the major version from the new version
-          new_major=$(echo ${{ steps.version.outputs.new_version }} | sed 's/v//' | cut -d. -f1)
+          # Extract the major version from the new version (more reliably)
+          new_major=$(echo "${{ steps.version.outputs.new_version }}" | sed 's/^v//' | cut -d. -f1)
 
           # Create or update the major version tag
           git tag -f "v${new_major}"

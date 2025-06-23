@@ -11,7 +11,7 @@ inputs:
     description: "Mark as pre-release"
     required: false
     default: "false"
-  
+
 outputs:
   new_version:
     description: "Generated semantic version number (e.g., v1.2.3)"
@@ -26,8 +26,8 @@ outputs:
     description: "URL of the created release"
     value: ${{ steps.release.outputs.release_url }}
 
-runs:  
-  using: "composite"  
+runs:
+  using: "composite"
   steps:
     - name: Determine Version
       id: version
@@ -36,16 +36,16 @@ runs:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -e
-        
+
         # Get the latest tag
         latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
         echo "Latest tag: $latest_tag"
-        
+
         # Extract version numbers
         major=$(echo $latest_tag | sed 's/v//' | cut -d. -f1)
         minor=$(echo $latest_tag | cut -d. -f2)
         patch=$(echo $latest_tag | cut -d. -f3 | cut -d- -f1)
-        
+
         # Get PR labels for pull request events
         if [[ "${{ github.event_name }}" == "pull_request" ]]; then
           pr_labels="${{ join(github.event.pull_request.labels.*.name, ',') }}"
@@ -56,10 +56,10 @@ runs:
           echo "Last commit message: $commit_message"
           pr_labels=""
         fi
-        
+
         # Determine version bump based on labels or commit message
         bump_type=""
-        
+
         # Check PR labels first (for PR events)
         if [[ -n "$pr_labels" ]]; then
           if [[ "$pr_labels" == *"breaking-change"* ]] || [[ "$pr_labels" == *"major"* ]]; then
@@ -81,7 +81,7 @@ runs:
             bump_type="patch"  # Default to patch
           fi
         fi
-        
+
         # Calculate new version
         if [[ "$bump_type" == "major" ]]; then
           new_version="v$((major + 1)).0.0"
@@ -90,22 +90,38 @@ runs:
         else
           new_version="v${major}.${minor}.$((patch + 1))"
         fi
-        
+
         echo "New version: $new_version (${bump_type} bump)"
-        
+
         # Output values
         echo "new_version=$new_version" >> "$GITHUB_OUTPUT"
         echo "previous_version=$latest_tag" >> "$GITHUB_OUTPUT"
         echo "bump_type=$bump_type" >> "$GITHUB_OUTPUT"
+        echo "major=$major" >> "$GITHUB_OUTPUT"
 
-    - name: Create Tag
+    - name: Create Tags
       shell: bash
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        
+
+        # Create a new tag for the new version
         git tag -a "${{ steps.version.outputs.new_version }}" -m "Release ${{ steps.version.outputs.new_version }}"
         git push origin "${{ steps.version.outputs.new_version }}"
+
+        # Force update the major version tag to point to the current commit
+        if [[ "${{ steps.version.outputs.major }}" -gt 0 ]]; then
+          # Extract the major version from the new version
+          new_major=$(echo ${{ steps.version.outputs.new_version }} | sed 's/v//' | cut -d. -f1)
+
+          # Create or update the major version tag
+          git tag -f "v${new_major}"
+          git push origin "v${new_major}" --force
+        fi
+
+        # Create or update the 'latest' tag to always point to the most recent release
+        git tag -f "latest"
+        git push origin "latest" --force
 
     - name: Create Release
       id: release
@@ -122,10 +138,10 @@ runs:
             target_commitish: context.sha,
             generate_release_notes: true  // Use GitHub's native release notes
           });
-          
+
           console.log(`Created release: ${release.html_url}`);
           core.setOutput('release_url', release.html_url);
-          
+
           // Comment on PR if this is a PR event
           if (context.eventName === 'pull_request' && context.payload.pull_request) {
             await github.rest.issues.createComment({

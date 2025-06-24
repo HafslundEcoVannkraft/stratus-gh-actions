@@ -55,10 +55,11 @@ Each action has its own documentation explaining its specific usage and configur
 To use an action from this repository, reference it in your workflow file with the following syntax:
 
 ```yaml
-uses: HafslundEcoVannkraft/stratus-gh-actions/[action-name]@main
+uses: HafslundEcoVannkraft/stratus-gh-actions/[action-name]@v3
 ```
 
 Replace:
+
 - `[action-name]` with the specific action folder name (e.g., `release`, `hello-world`, `build-scope-analyzer`)
 - `@main` with the desired version tag or branch
 
@@ -81,7 +82,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Say Hello
-        uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@main
+        uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@v3
 ```
 
 ### Simple Version Bump and Release Action
@@ -89,6 +90,7 @@ jobs:
 A lightweight action that automates version management and release creation using GitHub's native features:
 
 **Key Features:**
+
 - 🔄 Automatic version bumping based on PR labels or commit messages
 - 📝 Native GitHub release notes (no external dependencies)
 - 🏷️ Semantic versioning support
@@ -102,6 +104,7 @@ For detailed information about this action, see the [release action documentatio
 An intelligent action that analyzes git changes to determine what needs to be built, generating a strategy matrix for GitHub Actions workflows. This action helps optimize CI/CD pipelines by only building what has changed.
 
 **Key Features:**
+
 - 🔍 Analyzes git changes to identify modified directories
 - 📊 Generates GitHub Actions strategy matrix
 - 🗑️ Identifies deleted folders for cleanup
@@ -117,7 +120,7 @@ name: Release
 on:
   pull_request:
     types: [closed]
-    branches: [ main ]
+    branches: [main]
 
 permissions:
   contents: write
@@ -131,9 +134,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
+
       - name: Create Release
-        uses: HafslundEcoVannkraft/stratus-gh-actions/release@main
+        uses: HafslundEcoVannkraft/stratus-gh-actions/release@v3
 ```
 
 ### Build Scope Analyzer Workflow Example
@@ -143,9 +146,9 @@ name: Build Changed Components
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main]
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   analyze:
@@ -157,14 +160,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
+
       - name: Analyze Build Scope
         id: scope
-        uses: HafslundEcoVannkraft/stratus-gh-actions/build-scope-analyzer@main
+        uses: HafslundEcoVannkraft/stratus-gh-actions/build-scope-analyzer@v3
         with:
-          include-pattern: 'apps/*'
-          exclude-pattern: 'apps/*/tests'
-          
+          include-pattern: "apps/*"
+          exclude-pattern: "apps/*/tests"
+
   build:
     needs: analyze
     if: needs.analyze.outputs.has-changes == 'true'
@@ -196,13 +199,17 @@ Contributions are welcome! If you'd like to add an action, improve existing ones
 This repository uses an automated release process with two distinct components:
 
 #### 1. Version Bumping (Workflow Logic)
+
 When a Pull Request is merged to `main`, the workflow determines the version bump based on PR labels:
+
 - **Major** (vX.0.0): PRs with `breaking-change` or `major` label
 - **Minor** (v0.X.0): PRs with `enhancement`, `feature`, or `minor` label
 - **Patch** (v0.0.X): All other PRs (default)
 
 #### 2. Release Notes Categorization (`.github/release.yml`)
+
 GitHub automatically categorizes merged PRs in release notes based on labels:
+
 - PRs with `enhancement` or `feature` labels → 🚀 Features
 - PRs with `bug` or `bugfix` labels → 🐛 Bug Fixes
 - PRs with `documentation` label → 📚 Documentation

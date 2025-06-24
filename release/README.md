@@ -62,14 +62,14 @@ jobs:
           fetch-depth: 0
 
       - name: Create Release
-        uses: HafslundEcoVannkraft/stratus-gh-actions/release@main
+        uses: HafslundEcoVannkraft/stratus-gh-actions/release@v3
 ```
 
 ### With Options
 
 ```yaml
 - name: Create Release
-  uses: HafslundEcoVannkraft/stratus-gh-actions/release@main
+  uses: HafslundEcoVannkraft/stratus-gh-actions/release@v3
   with:
     draft: false # Create as published release (default: false)
     prerelease: true # Mark as pre-release
@@ -117,7 +117,7 @@ jobs:
           fetch-depth: 0
 
       - name: Create Release
-        uses: HafslundEcoVannkraft/stratus-gh-actions/release@main
+        uses: HafslundEcoVannkraft/stratus-gh-actions/release@v3
 ```
 
 ### Release on Direct Push
@@ -141,14 +141,14 @@ jobs:
           fetch-depth: 0
 
       - name: Create Release
-        uses: HafslundEcoVannkraft/stratus-gh-actions/release@main
+        uses: HafslundEcoVannkraft/stratus-gh-actions/release@v3
 ```
 
 ### Draft Release for Review
 
 ```yaml
 - name: Create Draft Release
-  uses: HafslundEcoVannkraft/stratus-gh-actions/release@main
+  uses: HafslundEcoVannkraft/stratus-gh-actions/release@v3
   with:
     draft: true
 ```

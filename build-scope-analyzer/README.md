@@ -22,7 +22,7 @@ This GitHub Action analyzes changes in a repository to determine what applicatio
 ```yaml
 - name: Analyze changes
   id: analyze
-  uses: HafslundEcoVannkraft/stratus-gh-actions/build-scope-analyzer@release/v3.0.0
+  uses: HafslundEcoVannkraft/stratus-gh-actions/build-scope-analyzer@v3
   with:
     root-path: ${{ github.workspace }}
     include-pattern: "src/*"

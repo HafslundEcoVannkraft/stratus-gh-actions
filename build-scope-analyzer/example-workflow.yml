@@ -27,7 +27,7 @@ jobs:
 
       - name: Analyze changes
         id: scope
-        uses: HafslundEcoVannkraft/stratus-gh-actions/build-scope-analyzer@main
+        uses: HafslundEcoVannkraft/stratus-gh-actions/build-scope-analyzer@v3
         with:
           root-path: ${{ github.workspace }}
           include-pattern: "apps/*"

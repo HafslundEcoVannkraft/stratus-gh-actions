@@ -25,9 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Say Hello
-        uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@main
+        uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@v3
 ```
 
 ## Location in Monorepo
@@ -65,9 +65,8 @@ This action doesn't produce any outputs. It simply prints "Hello world from stra
 
 ```yaml
 - name: Say Hello
-  uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@main
+  uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@v3
 ```
-
 
 ### Using Specific Version
 
@@ -75,13 +74,13 @@ While you can use specific tags or commit SHAs, in a monorepo it's common to ref
 
 ```yaml
 # Using main branch
-- uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@main
+- uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@v3
 
 # Using a specific release
-- uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@v1.0.0
+- uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@v3
 
 # Using a specific commit
-- uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@commit-sha
+- uses: HafslundEcoVannkraft/stratus-gh-actions/hello-world@v3
 ```
 
 ## Contributing

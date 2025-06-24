@@ -216,3 +216,7 @@ terraform.rc
 
 # Ignore local _temp folders
 **/_temp/
+
+# Ignore files often genereated or used by AI tools
+git.diff
+PR.md

@@ -29,13 +29,49 @@ jobs:
           sed -i "s|image: \"docker://ghcr.io/hafslundecoVannkraft/stratus-gh-actions/build-scope-analyzer:.*\"|image: \"docker://ghcr.io/hafslundecoVannkraft/stratus-gh-actions/build-scope-analyzer:${VERSION}\"|" build-scope-analyzer/action.yml
           sed -i "s/^version = \".*\"/version = \"${VERSION_NO_V}\"/" build-scope-analyzer/pyproject.toml
       - name: Commit and push version bump
+        env:
+          STRATUS_GA_BOT_PEM: ${{ secrets.STRATUS_GA_BOT_PEM }}
+          STRATUS_GA_BOT_ID: ${{ vars.STRATUS_GA_BOT_ID }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
         run: |
+          # Install jq and openssl if not present
+          sudo apt-get update && sudo apt-get install -y jq
+
+          # Write PEM to file
+          echo "$STRATUS_GA_BOT_PEM" > private-key.pem
+
+          # Generate JWT
+          now=$(date +%s)
+          exp=$((now + 540))
+          header='{"alg":"RS256","typ":"JWT"}'
+          payload="{\"iat\":$now,\"exp\":$exp,\"iss\":\"$STRATUS_GA_BOT_ID\"}"
+          base64url() { openssl base64 -e -A | tr '+/' '-_' | tr -d '='; }
+          header_b64=$(echo -n "$header" | base64url)
+          payload_b64=$(echo -n "$payload" | base64url)
+          unsigned_token="$header_b64.$payload_b64"
+          signature=$(echo -n "$unsigned_token" | openssl dgst -sha256 -sign private-key.pem | base64url)
+          jwt="$unsigned_token.$signature"
+
+          # Get installation ID
+          installation_id=$(curl -s -H "Authorization: Bearer $jwt" -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/$GITHUB_REPOSITORY/installation | jq -r .id)
+
+          # Get installation access token
+          access_token=$(curl -s -X POST -H "Authorization: Bearer $jwt" -H "Accept: application/vnd.github+json" \
+            https://api.github.com/app/installations/$installation_id/access_tokens | jq -r .token)
+
+          rm private-key.pem
+
+          # Set up git
+          git config --global user.name "stratus-ga-bot[app]"
+          git config --global user.email "stratus-ga-bot[app]@users.noreply.github.com"
+          git remote set-url origin https://x-access-token:$access_token@github.com/$GITHUB_REPOSITORY.git
+
           VERSION=${{ steps.version.outputs.new_version }}
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add build-scope-analyzer/action.yml build-scope-analyzer/pyproject.toml
           git commit -m "chore: bump version to ${VERSION} [pre-merge]" || echo "No changes to commit."
-          git push origin HEAD:${{ github.head_ref }} || echo "No changes to push."
+          git push origin HEAD:$GITHUB_HEAD_REF || echo "No changes to push."
       - name: Comment Next Version on PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7

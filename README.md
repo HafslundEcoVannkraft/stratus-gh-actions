@@ -4,16 +4,26 @@ Welcome to `stratus-gh-actions`! This repository hosts a collection of reusable 
 
 ## Table of Contents
 
-- [About](#about)
-- [Repository Structure](#repository-structure)
-- [Available Actions](#available-actions)
-  - [Hello World](#hello-world-action)
-  - [Simple Version Bump and Release](#simple-version-bump-and-release-action)
-  - [Build Scope Analyzer](#build-scope-analyzer-action)
-- [Usage](#usage)
-- [Examples](#examples)
-- [Contributing](#contributing)
-- [License](#license)
+- [Stratus GitHub Actions](#stratus-github-actions)
+  - [Table of Contents](#table-of-contents)
+  - [About](#about)
+    - [Key Benefits](#key-benefits)
+  - [Repository Structure](#repository-structure)
+  - [Usage](#usage)
+  - [Available Actions](#available-actions)
+    - [Hello World Action](#hello-world-action)
+      - [Example Using Hello World Action](#example-using-hello-world-action)
+    - [Simple Version Bump and Release Action](#simple-version-bump-and-release-action)
+    - [Build Scope Analyzer Action](#build-scope-analyzer-action)
+    - [Basic Release Workflow Example](#basic-release-workflow-example)
+    - [Build Scope Analyzer Workflow Example](#build-scope-analyzer-workflow-example)
+  - [Contributing](#contributing)
+    - [Release Process](#release-process)
+      - [1. Version Bumping (Workflow Logic)](#1-version-bumping-workflow-logic)
+      - [2. Release Notes Categorization (`.github/release.yml`)](#2-release-notes-categorization-githubreleaseyml)
+    - [Development Guidelines](#development-guidelines)
+    - [Version Control](#version-control)
+  - [License](#license)
 
 ## About
 
@@ -238,3 +248,4 @@ The repository automatically handles versioning through the release action. You 
 ## License
 
 MIT
+

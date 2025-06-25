@@ -2,7 +2,7 @@ name: Pre-Merge Version Check
 
 on:
   pull_request:
-    types: [opened, synchronize, labeled]
+    types: [opened, labeled]
 
 permissions:
   contents: write
@@ -28,7 +28,13 @@ jobs:
           VERSION_NO_V=${VERSION#v}
           sed -i "s|image: \"docker://ghcr.io/hafslundecoVannkraft/stratus-gh-actions/build-scope-analyzer:.*\"|image: \"docker://ghcr.io/hafslundecoVannkraft/stratus-gh-actions/build-scope-analyzer:${VERSION}\"|" build-scope-analyzer/action.yml
           sed -i "s/^version = \".*\"/version = \"${VERSION_NO_V}\"/" build-scope-analyzer/pyproject.toml
+          if git diff --exit-code > /dev/null; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
       - name: Create GitHub App JWT and Installation Access Token
+        if: steps.version.outputs.changed == 'true'
         id: jwt
         env:
           STRATUS_GA_BOT_PEM: ${{ secrets.STRATUS_GA_BOT_PEM }}
@@ -66,6 +72,7 @@ jobs:
 
           rm private-key.pem
       - name: Commit and push version bump via API
+        if: steps.version.outputs.changed == 'true'
         uses: actions/github-script@v7
         with:
           github-token: ${{ steps.jwt.outputs.strauts_ga_bot_installation_token }}

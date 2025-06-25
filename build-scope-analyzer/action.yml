@@ -49,9 +49,12 @@ outputs:
   ref:
     description: "Git ref used for comparison"
 
+env:
+  GITHUB_ORG_LOWER_CASE: "stratus-test"
+
 runs:
   using: "docker"
-  image: "docker://ghcr.io/hafslundecovannkraft/stratus-gh-actions/build-scope-analyzer:sha-9373fbbe"
+  image: "docker://ghcr.io/stratus-test/stratus-gh-actions/build-scope-analyzer:latest"
   args:
     - "--root-path"
     - "${{ inputs.root-path }}"

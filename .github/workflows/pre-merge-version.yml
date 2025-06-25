@@ -172,6 +172,7 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
+          github-token: ${{ GITHUB_TOKEN }}
           script: |
             const version = process.env.VERSION || '${{ steps.version.outputs.new_version }}';
             const body = `🔢 If merged now, the next release version will be: **${version}**\n\nThe action.yml and pyproject.toml have been updated in this PR branch.`;

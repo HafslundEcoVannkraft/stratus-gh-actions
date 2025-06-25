@@ -21,6 +21,19 @@ jobs:
         uses: ./release
         with:
           dry-run: true
+      - name: Comment Next Version on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = process.env.VERSION || '${{ steps.version.outputs.new_version }}';
+            const body = `🔢 If merged now, the next release version will be: **${version}**\n\nThe action.yml and pyproject.toml have been updated in this PR branch.`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
       - name: Update action.yml and pyproject.toml with next version
         run: |
           VERSION=${{ steps.version.outputs.new_version }}
@@ -168,18 +181,5 @@ jobs:
               console.error('Error updating files via API:', error);
               throw error;
             }
-      - name: Comment Next Version on PR
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ GITHUB_TOKEN }}
-          script: |
-            const version = process.env.VERSION || '${{ steps.version.outputs.new_version }}';
-            const body = `🔢 If merged now, the next release version will be: **${version}**\n\nThe action.yml and pyproject.toml have been updated in this PR branch.`;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body
-            });
+
     # Require this job to pass before merging (set branch protection in GitHub UI)

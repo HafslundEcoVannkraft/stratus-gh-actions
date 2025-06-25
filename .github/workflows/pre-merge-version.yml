@@ -28,7 +28,8 @@ jobs:
           VERSION_NO_V=${VERSION#v}
           sed -i "s|image: \"docker://ghcr.io/hafslundecoVannkraft/stratus-gh-actions/build-scope-analyzer:.*\"|image: \"docker://ghcr.io/hafslundecoVannkraft/stratus-gh-actions/build-scope-analyzer:${VERSION}\"|" build-scope-analyzer/action.yml
           sed -i "s/^version = \".*\"/version = \"${VERSION_NO_V}\"/" build-scope-analyzer/pyproject.toml
-      - name: Commit and push version bump
+      - name: Create GitHub App JWT and Installation Access Token
+        id: jwt
         env:
           STRATUS_GA_BOT_PEM: ${{ secrets.STRATUS_GA_BOT_PEM }}
           STRATUS_GA_BOT_ID: ${{ vars.STRATUS_GA_BOT_ID }}
@@ -61,8 +62,14 @@ jobs:
           access_token=$(curl -s -X POST -H "Authorization: Bearer $jwt" -H "Accept: application/vnd.github+json" \
             https://api.github.com/app/installations/$installation_id/access_tokens | jq -r .token)
 
+          echo "strauts_ga_bot_installation_token=$access_token" >> $GITHUB_OUTPUT
+
           rm private-key.pem
 
+      - name: Commit and push version bump
+        env:
+          GITHUB_TOKEN: ${{ steps.jwt.outputs.strauts_ga_bot_installation_token }}
+        run: |
           # Set up git
           git config --global user.name "stratus-ga-bot[app]"
           git config --global user.email "stratus-ga-bot[app]@users.noreply.github.com"

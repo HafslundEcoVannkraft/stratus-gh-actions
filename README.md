@@ -1,8 +1,18 @@
 # Stratus GitHub Actions
 
-> **⚠️ NOTE: This repository is currently a mirror of the canonical development repository at [`stratus-test/stratus-gh-actions`](https://github.com/stratus-test/stratus-gh-actions). All maintenance and development are performed in the `stratus-test` organization while we await a design decision to support public packages in the HafslundEcoVannkraft organization.**
+> **⚠️ ARCHIVED: This repository is no longer maintained. It has been replaced by [`HafslundEcoVannkraft/stratus-actions`](https://github.com/HafslundEcoVannkraft/stratus-actions).**
 >
-> **Remote updates, tags, and releases are automatically synced from `stratus-test/stratus-gh-actions` every 15 minutes or by manual workflow dispatch. Please submit issues and pull requests to the `stratus-test` repository.**
+> **All development, releases, and support have moved to the new repository. This repository is now archived and will receive no further updates. Please use [`HafslundEcoVannkraft/stratus-actions`](https://github.com/HafslundEcoVannkraft/stratus-actions) for all issues, pull requests, and usage.**
+
+---
+
+# Repository Archived
+
+This repository has been replaced by [`HafslundEcoVannkraft/stratus-actions`](https://github.com/HafslundEcoVannkraft/stratus-actions) and is now archived. Please update all references and workflows to use the new repository.
+
+---
+
+<!-- The rest of the previous README is kept below for historical reference. -->
 
 Welcome to `stratus-gh-actions`! This repository hosts a collection of reusable composite GitHub Actions to streamline workflows across repositories. The repository is public, you can easily share actions with any repository, ensuring consistency and reducing duplicated code.
 
